@@ -200,7 +200,7 @@ hr {
 
 [data-testid="stFileUploaderDropzoneInstructions"]::before,
 [data-testid="stFileUploader"] [class*="Instructions"]::before {
-    content: "ファイルをドラッグ&ドロップ\A\Aまたは" !important;
+    content: "ファイルをドラッグ&ドロップ\\A\\Aまたは" !important;
     white-space: pre !important;
     font-size: 0.95rem !important;
     display: block !important;
@@ -780,6 +780,7 @@ def delete_file(file_id):
 def get_audio_duration_seconds(audio_path: str) -> float:
     """音声ファイルの長さ（秒）を取得"""
     try:
+        import torchaudio_compat  # noqa: F401
         import whisperx
         audio = whisperx.load_audio(audio_path)
         return len(audio) / 16000.0

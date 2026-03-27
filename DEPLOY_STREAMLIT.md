@@ -12,9 +12,12 @@
 
 ## `torchaudio.set_audio_backend` / `AttributeError`（pyannote.audio）
 
-**pyannote.audio 3.1.1** が **`torchaudio.set_audio_backend("soundfile")`** を呼ぶが、**torchaudio 2.4 以降で当該 API が削除**されていると `AttributeError` になる。
+**pyannote.audio 3.1.1** が **`torchaudio.set_audio_backend`** を参照するが、**torchaudio 2.4 以降で当該 API が削除**されていると `AttributeError` になる。
 
-**対処:** `pyproject.toml` の override で **`torch==2.3.1`** と **`torchaudio==2.3.1`** に固定（当該 API が残る組み合わせ）。変更を push して再デプロイする。
+**対処（本リポジトリ）**
+
+- **`torchaudio_compat.py`** を **`import whisperx` より前**に読み込み、削除された API を no-op で補う（`batch_process.py` / `get_audio_duration_seconds`）。
+- **`pyproject.toml`** の override で **`torch==2.4.1`** と **`torchaudio==2.4.1`**（**transformers** が **PyTorch≥2.4** を要求するため、2.3 固定はログに「Disabling PyTorch」が出る）。
 
 参考: [pyannote/pyannote-audio#1576](https://github.com/pyannote/pyannote-audio/issues/1576)
 
