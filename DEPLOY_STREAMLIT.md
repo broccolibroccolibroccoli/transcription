@@ -80,13 +80,9 @@ whisperx==3.2.0
 
 ## YouTube 利用時
 
-`yt-dlp` の音声変換に **FFmpeg** が必要な場合があります。リポジトリ直下に `packages.txt` を置き、1 行だけ:
+`yt-dlp` の音声変換に **FFmpeg** が必要な場合があります。リポジトリ直下の **`packages.txt`** に **`ffmpeg`** を 1 行で書きます。
 
-```text
-ffmpeg
-```
-
-（`packages.txt` の記述ミスで apt が失敗すると、デプロイ全体が落ちることがあるので、問題が続くときだけ追加してください。）
+**注意:** `packages.txt` は **コメント不可**（`#` や日本語の行はパッケージ名として解釈され、`Unable to locate package` で失敗します）。**パッケージ名のみ、1 行に 1 つ**だけ書いてください。
 
 ## Secrets
 
