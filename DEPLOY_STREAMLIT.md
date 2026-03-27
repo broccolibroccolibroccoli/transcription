@@ -28,6 +28,14 @@
 
 ---
 
+## `No module named 'matplotlib'`（whisperx 読み込み時）
+
+**pyannote.audio** などが **`matplotlib`** を import するが、依存解決で入らない環境があると **`import whisperx` が失敗**する。
+
+**対処:** **`requirements.txt`** に **`matplotlib>=3.7`** を明示している。push して再デプロイする。
+
+---
+
 ## `AV_OPT_TYPE_CHANNEL_LAYOUT` / `av` のビルド失敗（gcc）
 
 `av==11` をソースビルドすると、**OS の FFmpeg ライブラリのバージョン**と PyAV 11 の C コードが合わず（例: `AV_OPT_TYPE_CHANNEL_LAYOUT` 未定義）、**gcc で失敗**することがあります。
