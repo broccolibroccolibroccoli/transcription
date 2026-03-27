@@ -10,6 +10,16 @@
 
 ---
 
+## `torchaudio.set_audio_backend` / `AttributeError`（pyannote.audio）
+
+**pyannote.audio 3.1.1** が **`torchaudio.set_audio_backend("soundfile")`** を呼ぶが、**torchaudio 2.4 以降で当該 API が削除**されていると `AttributeError` になる。
+
+**対処:** `pyproject.toml` の override で **`torch==2.3.1`** と **`torchaudio==2.3.1`** に固定（当該 API が残る組み合わせ）。変更を push して再デプロイする。
+
+参考: [pyannote/pyannote-audio#1576](https://github.com/pyannote/pyannote-audio/issues/1576)
+
+---
+
 ## `AV_OPT_TYPE_CHANNEL_LAYOUT` / `av` のビルド失敗（gcc）
 
 `av==11` をソースビルドすると、**OS の FFmpeg ライブラリのバージョン**と PyAV 11 の C コードが合わず（例: `AV_OPT_TYPE_CHANNEL_LAYOUT` 未定義）、**gcc で失敗**することがあります。
