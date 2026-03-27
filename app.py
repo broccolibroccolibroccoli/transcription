@@ -19,20 +19,22 @@ UPLOADS_DIR = os.path.join(BASE_DIR, "uploads")
 # True にするとサイドバーに YouTube URL 入力タブを表示
 SHOW_YOUTUBE_UPLOAD = True
 
-# アップロード用ディレクトリを作成
-os.makedirs(UPLOADS_DIR, exist_ok=True)
-
-# データベーススキーマを確実に作成
-from database_schema import create_database_schema
-create_database_schema(DB_PATH)
-
-# ページ設定
+# Streamlit では set_page_config を最初の st 呼び出しにする（クラウドでの起動失敗を防ぐ）
 st.set_page_config(
     page_title="音声文字起こしアプリ",
     page_icon="🎙️",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="expanded",
 )
+
+try:
+    os.makedirs(UPLOADS_DIR, exist_ok=True)
+    from database_schema import create_database_schema
+    create_database_schema(DB_PATH)
+except Exception as e:
+    st.error("データベースの初期化に失敗しました。権限やパスを確認してください。")
+    st.exception(e)
+    st.stop()
 
 # KARTE サポートサイト（https://support.karte.io/）トンマナ参考
 # アクセントカラー: ティール #2aab9f

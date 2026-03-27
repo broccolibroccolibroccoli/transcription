@@ -1,5 +1,22 @@
 # Streamlit Community Cloud でのデプロイ（トラブルシュート）
 
+## 「Oh no. Error running app」が出るとき（Reboot 直後など）
+
+アプリの Python が**起動直後に例外で止まっている**ときに表示されます（原因はログに出ます）。
+
+1. **Manage app → Logs（アプリのログ）** を開き、**赤い Traceback（最後の方）** を確認する。  
+   - `ModuleNotFoundError` → `requirements.txt` のインストール失敗または不足。  
+   - `PermissionError` / `Read-only file system` → 書き込み先パスの問題（通常はリポジトリ直下で解消）。  
+   - `MemoryError` / `Killed` → メモリ不足（WhisperX 実行時に多い）。
+
+2. **Python バージョン** を **3.10 または 3.11** に変更して再デプロイ（Advanced settings）。
+
+3. リポジトリの **`app.py` は `st.set_page_config` を先に実行**し、DB 初期化失敗時は画面上に `st.exception` で表示するようになっているので、**最新版を push** してから再度 Reboot する。
+
+4. ログに何も出ない・すぐ落ちる場合は、Streamlit の **フォーラム**や **ステータスページ**も確認。
+
+---
+
 ## 「Error installing requirements」が出るとき
 
 1. **Manage app → Logs（または Build）** を開き、**pip のエラー全文**を確認する。  
