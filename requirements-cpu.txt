@@ -1,0 +1,12 @@
+# Streamlit Cloud で通常の requirements.txt が失敗する場合の代替案
+# Deploy → Advanced settings → Requirements file でこのファイルを指定
+streamlit>=1.36.0
+python-dotenv>=1.0.0
+openai>=1.0.0
+yt-dlp>=2024.1.0
+
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.4.1+cpu
+torchaudio==2.4.1+cpu
+
+whisperx==3.2.0
