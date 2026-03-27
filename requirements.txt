@@ -1,8 +1,12 @@
 # Streamlit アプリ・文字起こし（WhisperX）用
 # Main file: app.py
 #
+# 【重要】Python 3.14 では不可: whisperx が ctranslate2==4.4.0 を要求するが、
+# Py3.14 用ホイールが無く依存解決が失敗する。
+# → Streamlit Cloud の「Advanced settings」で Python を 3.11 または 3.12 にすること（必須）
+# → リポジトリの runtime.txt も併用（環境によっては参照される）
+#
 # torch / torchaudio は whisperx が依存関係として解決するため、ここでは明示しない
-# （バージョンを固定しすぎると pip の解決失敗や Streamlit Cloud のビルド失敗の原因になります）
 streamlit>=1.36.0
 python-dotenv>=1.0.0
 openai>=1.0.0

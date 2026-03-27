@@ -1,5 +1,19 @@
 # Streamlit Community Cloud でのデプロイ（トラブルシュート）
 
+## `ctranslate2==4.4.0` / `No matching distribution` / `whisperx cannot be used`（Python 3.14）
+
+ログに **`Using Python 3.14.x`** と出て、`ctranslate2==4.4.0` が解決できない／**`No wheels with a matching Python ABI`** となるのは、**WhisperX 3.2.0 が要求する ctranslate2 4.4.0 に Python 3.14 用のホイールが無い**ためです。
+
+**対処（必須）**
+
+1. Streamlit Cloud の **Manage app → Settings（または Deploy の Advanced settings）** を開く。  
+2. **Python version** を **3.11** または **3.12** に変更して保存する。  
+3. バージョン変更ができない／反映されない場合は、アプリを **削除して同じリポジトリから再デプロイ**し、**最初から 3.11 / 3.12 を選ぶ**（公式の挙動は [Upgrade Python](https://docs.streamlit.io/deploy/streamlit-community-cloud/manage-your-app/upgrade-python) を参照）。
+
+リポジトリ直下の **`runtime.txt`**（`python-3.11.9`）は、環境によって参照されますが、**必ずしも Cloud で強制されない**ため、**画面上の Python 選択が確実**です。
+
+---
+
 ## 「Oh no. Error running app」が出るとき（Reboot 直後など）
 
 アプリの Python が**起動直後に例外で止まっている**ときに表示されます（原因はログに出ます）。
