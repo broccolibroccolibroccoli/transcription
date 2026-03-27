@@ -1,5 +1,17 @@
 # Streamlit Community Cloud でのデプロイ（トラブルシュート）
 
+## `pkg-config is required for building PyAV` / `av==11.0.0` ビルド失敗
+
+`faster-whisper`（WhisperX 経由）が **`av`（PyAV）** を必要とし、**`av==11.*` に cp312 用のホイールが無い**環境ではソースビルドになります。その際 **`pkg-config` と FFmpeg 関連の開発パッケージ**が無いと失敗します。
+
+**対処**
+
+1. リポジトリ直下の **`packages.txt`**（apt 用）がデプロイに含まれていることを確認する（本リポジトリに同梱）。  
+2. 変更を push して再デプロイする。  
+3. それでもビルドがタイムアウト・失敗する場合は、**無料枠のビルド時間・メモリ不足**の可能性があります。その場合は **メモリの大きいプラン**や **自前 Docker / VPS** を検討してください。
+
+---
+
 ## `ctranslate2==4.4.0` / `No matching distribution` / `whisperx cannot be used`（Python 3.14）
 
 ログに **`Using Python 3.14.x`** と出て、`ctranslate2==4.4.0` が解決できない／**`No wheels with a matching Python ABI`** となるのは、**WhisperX 3.2.0 が要求する ctranslate2 4.4.0 に Python 3.14 用のホイールが無い**ためです。

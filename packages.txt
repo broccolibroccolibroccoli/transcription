@@ -1,0 +1,11 @@
+pkg-config
+ffmpeg
+libavformat-dev
+libavcodec-dev
+libavdevice-dev
+libavutil-dev
+libswscale-dev
+libswresample-dev
+libavfilter-dev
+python3-dev
+build-essential
