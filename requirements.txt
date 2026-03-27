@@ -6,8 +6,9 @@
 # → Streamlit Cloud の「Advanced settings」で Python を 3.11 または 3.12 にすること（必須）
 # → リポジトリの runtime.txt も併用（環境によっては参照される）
 #
-# faster-whisper → PyAV(av): av 11 は cp312 用ホイールが無い場合、ソースビルドになる。
-# Streamlit Cloud ではリポジトリ直下の packages.txt で pkg-config / ffmpeg / libav*-dev を入れること。
+# PyAV(av): av 11 のソースビルドは環境の FFmpeg ヘッダと衝突しやすい。
+# → リポジトリ直下の pyproject.toml の [tool.uv] override-dependencies で
+#    faster-whisper==1.0.3 と av==12.3.0（ホイール）に上書きする（uv が読む）。
 #
 # torch / torchaudio は whisperx が依存関係として解決するため、ここでは明示しない
 streamlit>=1.36.0

@@ -1,0 +1,15 @@
+[project]
+name = "transcription-app"
+version = "0.1.0"
+requires-python = ">=3.11,<3.14"
+description = "WhisperX Streamlit app (uv overrides for PyAV / faster-whisper on Cloud)"
+
+# Streamlit Cloud は先に `uv pip install` を実行する。
+# whisperx が固定する faster-whisper==1.0.0 → av 11 はソースビルドになり、
+# 新しい FFmpeg ヘッダと衝突（AV_OPT_TYPE_CHANNEL_LAYOUT 等）する。
+# 以下で av 12（cp312 用ホイール）と faster-whisper 1.0.3 に上書きする。
+[tool.uv]
+override-dependencies = [
+    "faster-whisper==1.0.3",
+    "av==12.3.0",
+]

@@ -1,14 +1,16 @@
 # Streamlit Community Cloud でのデプロイ（トラブルシュート）
 
-## `pkg-config is required for building PyAV` / `av==11.0.0` ビルド失敗
+## `AV_OPT_TYPE_CHANNEL_LAYOUT` / `av` のビルド失敗（gcc）
 
-`faster-whisper`（WhisperX 経由）が **`av`（PyAV）** を必要とし、**`av==11.*` に cp312 用のホイールが無い**環境ではソースビルドになります。その際 **`pkg-config` と FFmpeg 関連の開発パッケージ**が無いと失敗します。
+`av==11` をソースビルドすると、**OS の FFmpeg ライブラリのバージョン**と PyAV 11 の C コードが合わず（例: `AV_OPT_TYPE_CHANNEL_LAYOUT` 未定義）、**gcc で失敗**することがあります。
 
-**対処**
+**対処（本リポジトリの方針）**
 
-1. リポジトリ直下の **`packages.txt`**（apt 用）がデプロイに含まれていることを確認する（本リポジトリに同梱）。  
-2. 変更を push して再デプロイする。  
-3. それでもビルドがタイムアウト・失敗する場合は、**無料枠のビルド時間・メモリ不足**の可能性があります。その場合は **メモリの大きいプラン**や **自前 Docker / VPS** を検討してください。
+- **`pyproject.toml` の `[tool.uv] override-dependencies`** で **`faster-whisper==1.0.3`** と **`av==12.3.0`** に上書きし、**cp312 用の事前ビルドホイール**だけを使う（ソースビルドしない）。  
+- Streamlit Cloud は **`uv pip install`** を先に実行するため、この設定が効く想定です。  
+- **`packages.txt`** は **`ffmpeg` のみ**（yt-dlp 向け）。以前の `libav*-dev` 大量インストールは、逆に **新しすぎるヘッダで PyAV 11 のビルドを壊す**ことがあったため削減しています。
+
+`uv` が override を読まない経路だけ `pip` が動く場合は、同じ衝突が再発する可能性があります。そのときはログを確認し、**Streamlit / uv のバージョン**や **別ホスト**を検討してください。
 
 ---
 
