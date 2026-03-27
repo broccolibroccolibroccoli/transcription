@@ -814,12 +814,16 @@ def process_uploaded_file(uploaded_file, project_id: int = 1):
     
     try:
         from batch_process import process_audio_file, DB_PATH
-    except ImportError:
+    except ImportError as e:
         return {
             "success": False,
-            "error": "whisperx がインストールされていません。文字起こしには whisperx が必要です。"
-            "仮想環境で pip install whisperx を実行するか、"
-            "既存の whisperx 環境（例: ~/venvs/whisperx）でアプリを起動してください。",
+            "error": (
+                "whisperx の読み込みに失敗しました（文字起こしには whisperx が必要です）。\n\n"
+                f"【詳細】{e!s}\n\n"
+                "ローカル: pip install -r requirements.txt\n"
+                "Streamlit Cloud: ビルドログで pip が成功しているか確認し、"
+                "requirements.txt に torch / torchaudio / whisperx が含まれているか再デプロイしてください。"
+            ),
         }
     from database_schema import create_database_schema
 
@@ -846,10 +850,15 @@ def process_youtube_url(url: str, project_id: int = 1):
 
     try:
         from batch_process import process_audio_file, DB_PATH
-    except ImportError:
+    except ImportError as e:
         return {
             "success": False,
-            "error": "whisperx がインストールされていません。文字起こしには whisperx が必要です。",
+            "error": (
+                "whisperx の読み込みに失敗しました。\n\n"
+                f"【詳細】{e!s}\n\n"
+                "ローカル: pip install -r requirements.txt\n"
+                "Streamlit Cloud: ビルドログを確認し requirements.txt を再デプロイしてください。"
+            ),
         }
     from database_schema import create_database_schema
 

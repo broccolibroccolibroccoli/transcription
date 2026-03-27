@@ -1,7 +1,12 @@
 # Streamlit アプリ・文字起こし（WhisperX）用
 # デプロイ先の「Main file」は app.py を指定してください
+# whisperx は PyTorch に依存するため、先に torch / torchaudio を明示するとクラウドの解決が安定しやすいです
 streamlit>=1.36.0
 python-dotenv>=1.0.0
 openai>=1.0.0
 yt-dlp>=2024.1.0
+
+torch>=2.0.0,<2.5.0
+torchaudio>=2.0.0,<2.5.0
+
 whisperx
