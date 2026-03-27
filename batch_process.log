@@ -1,0 +1,169 @@
+/Users/kayoko.namba/venvs/whisperx/lib/python3.11/site-packages/pyannote/audio/core/io.py:47: UserWarning: 
+torchcodec is not installed correctly so built-in audio decoding will fail. Solutions are:
+* use audio preloaded in-memory as a {'waveform': (channel, time) torch.Tensor, 'sample_rate': int} dictionary;
+* fix torchcodec installation. Error message was:
+
+Could not load libtorchcodec. Likely causes:
+          1. FFmpeg is not properly installed in your environment. We support
+             versions 4, 5, 6, 7, and 8, and we attempt to load libtorchcodec
+             for each of those versions. Errors for versions not installed on
+             your system are expected; only the error for your installed FFmpeg
+             version is relevant. On Windows, ensure you've installed the
+             "full-shared" version which ships DLLs.
+          2. The PyTorch version (2.8.0) is not compatible with
+             this version of TorchCodec. Refer to the version compatibility
+             table:
+             https://github.com/pytorch/torchcodec?tab=readme-ov-file#installing-torchcodec.
+          3. Another runtime dependency; see exceptions below.
+
+        The following exceptions were raised as we tried to load libtorchcodec:
+        
+[start of libtorchcodec loading traceback]
+FFmpeg version 8:
+Traceback (most recent call last):
+  File "/Users/kayoko.namba/venvs/whisperx/lib/python3.11/site-packages/torchcodec/_core/ops.py", line 57, in load_torchcodec_shared_libraries
+    torch.ops.load_library(core_library_path)
+  File "/Users/kayoko.namba/venvs/whisperx/lib/python3.11/site-packages/torch/_ops.py", line 1478, in load_library
+    ctypes.CDLL(path)
+  File "/opt/homebrew/Cellar/python@3.11/3.11.15/Frameworks/Python.framework/Versions/3.11/lib/python3.11/ctypes/__init__.py", line 376, in __init__
+    self._handle = _dlopen(self._name, mode)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+OSError: dlopen(/Users/kayoko.namba/venvs/whisperx/lib/python3.11/site-packages/torchcodec/libtorchcodec_core8.dylib, 0x0006): Symbol not found: __ZN3c1013MessageLogger6streamEv
+  Referenced from: <8B2C1B8A-B128-3035-BF1E-44861574A688> /Users/kayoko.namba/venvs/whisperx/lib/python3.11/site-packages/torchcodec/libtorchcodec_core8.dylib
+  Expected in:     <D1057909-9D16-345A-8B8C-73FA6C3DB62C> /Users/kayoko.namba/venvs/whisperx/lib/python3.11/site-packages/torch/lib/libc10.dylib
+
+FFmpeg version 7:
+Traceback (most recent call last):
+  File "/Users/kayoko.namba/venvs/whisperx/lib/python3.11/site-packages/torchcodec/_core/ops.py", line 57, in load_torchcodec_shared_libraries
+    torch.ops.load_library(core_library_path)
+  File "/Users/kayoko.namba/venvs/whisperx/lib/python3.11/site-packages/torch/_ops.py", line 1478, in load_library
+    ctypes.CDLL(path)
+  File "/opt/homebrew/Cellar/python@3.11/3.11.15/Frameworks/Python.framework/Versions/3.11/lib/python3.11/ctypes/__init__.py", line 376, in __init__
+    self._handle = _dlopen(self._name, mode)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+OSError: dlopen(/Users/kayoko.namba/venvs/whisperx/lib/python3.11/site-packages/torchcodec/libtorchcodec_core7.dylib, 0x0006): Library not loaded: @rpath/libavutil.59.dylib
+  Referenced from: <99507B66-07B4-3CCE-BCC8-57E40E869A82> /Users/kayoko.namba/venvs/whisperx/lib/python3.11/site-packages/torchcodec/libtorchcodec_core7.dylib
+  Reason: tried: '/opt/homebrew/opt/ffmpeg/lib/libavutil.59.dylib' (no such file), '/System/Volumes/Preboot/Cryptexes/OS/opt/homebrew/opt/ffmpeg/lib/libavutil.59.dylib' (no such file), '/opt/homebrew/opt/ffmpeg/lib/libavutil.59.dylib' (no such file), '/System/Volumes/Preboot/Cryptexes/OS/opt/homebrew/opt/ffmpeg/lib/libavutil.59.dylib' (no such file), '/opt/homebrew/lib/libavutil.59.dylib' (no such file), '/System/Volumes/Preboot/Cryptexes/OS/opt/homebrew/lib/libavutil.59.dylib' (no such file)
+
+FFmpeg version 6:
+Traceback (most recent call last):
+  File "/Users/kayoko.namba/venvs/whisperx/lib/python3.11/site-packages/torchcodec/_core/ops.py", line 57, in load_torchcodec_shared_libraries
+    torch.ops.load_library(core_library_path)
+  File "/Users/kayoko.namba/venvs/whisperx/lib/python3.11/site-packages/torch/_ops.py", line 1478, in load_library
+    ctypes.CDLL(path)
+  File "/opt/homebrew/Cellar/python@3.11/3.11.15/Frameworks/Python.framework/Versions/3.11/lib/python3.11/ctypes/__init__.py", line 376, in __init__
+    self._handle = _dlopen(self._name, mode)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+OSError: dlopen(/Users/kayoko.namba/venvs/whisperx/lib/python3.11/site-packages/torchcodec/libtorchcodec_core6.dylib, 0x0006): Library not loaded: @rpath/libavutil.58.dylib
+  Referenced from: <86639CB1-DD57-3ADF-A6A4-A476231AB716> /Users/kayoko.namba/venvs/whisperx/lib/python3.11/site-packages/torchcodec/libtorchcodec_core6.dylib
+  Reason: tried: '/opt/homebrew/opt/ffmpeg/lib/libavutil.58.dylib' (no such file), '/System/Volumes/Preboot/Cryptexes/OS/opt/homebrew/opt/ffmpeg/lib/libavutil.58.dylib' (no such file), '/opt/homebrew/opt/ffmpeg/lib/libavutil.58.dylib' (no such file), '/System/Volumes/Preboot/Cryptexes/OS/opt/homebrew/opt/ffmpeg/lib/libavutil.58.dylib' (no such file), '/opt/homebrew/lib/libavutil.58.dylib' (no such file), '/System/Volumes/Preboot/Cryptexes/OS/opt/homebrew/lib/libavutil.58.dylib' (no such file)
+
+FFmpeg version 5:
+Traceback (most recent call last):
+  File "/Users/kayoko.namba/venvs/whisperx/lib/python3.11/site-packages/torchcodec/_core/ops.py", line 57, in load_torchcodec_shared_libraries
+    torch.ops.load_library(core_library_path)
+  File "/Users/kayoko.namba/venvs/whisperx/lib/python3.11/site-packages/torch/_ops.py", line 1478, in load_library
+    ctypes.CDLL(path)
+  File "/opt/homebrew/Cellar/python@3.11/3.11.15/Frameworks/Python.framework/Versions/3.11/lib/python3.11/ctypes/__init__.py", line 376, in __init__
+    self._handle = _dlopen(self._name, mode)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+OSError: dlopen(/Users/kayoko.namba/venvs/whisperx/lib/python3.11/site-packages/torchcodec/libtorchcodec_core5.dylib, 0x0006): Library not loaded: @rpath/libavutil.57.dylib
+  Referenced from: <78E71A73-4AF9-3A75-B63E-7C6261A7F3ED> /Users/kayoko.namba/venvs/whisperx/lib/python3.11/site-packages/torchcodec/libtorchcodec_core5.dylib
+  Reason: tried: '/opt/homebrew/opt/ffmpeg/lib/libavutil.57.dylib' (no such file), '/System/Volumes/Preboot/Cryptexes/OS/opt/homebrew/opt/ffmpeg/lib/libavutil.57.dylib' (no such file), '/opt/homebrew/opt/ffmpeg/lib/libavutil.57.dylib' (no such file), '/System/Volumes/Preboot/Cryptexes/OS/opt/homebrew/opt/ffmpeg/lib/libavutil.57.dylib' (no such file), '/opt/homebrew/lib/libavutil.57.dylib' (no such file), '/System/Volumes/Preboot/Cryptexes/OS/opt/homebrew/lib/libavutil.57.dylib' (no such file)
+
+FFmpeg version 4:
+Traceback (most recent call last):
+  File "/Users/kayoko.namba/venvs/whisperx/lib/python3.11/site-packages/torchcodec/_core/ops.py", line 57, in load_torchcodec_shared_libraries
+    torch.ops.load_library(core_library_path)
+  File "/Users/kayoko.namba/venvs/whisperx/lib/python3.11/site-packages/torch/_ops.py", line 1478, in load_library
+    ctypes.CDLL(path)
+  File "/opt/homebrew/Cellar/python@3.11/3.11.15/Frameworks/Python.framework/Versions/3.11/lib/python3.11/ctypes/__init__.py", line 376, in __init__
+    self._handle = _dlopen(self._name, mode)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+OSError: dlopen(/Users/kayoko.namba/venvs/whisperx/lib/python3.11/site-packages/torchcodec/libtorchcodec_core4.dylib, 0x0006): Library not loaded: @rpath/libavutil.56.dylib
+  Referenced from: <C03ACBF5-D573-300D-B2F6-F4E4DE83E1BE> /Users/kayoko.namba/venvs/whisperx/lib/python3.11/site-packages/torchcodec/libtorchcodec_core4.dylib
+  Reason: tried: '/opt/homebrew/opt/ffmpeg/lib/libavutil.56.dylib' (no such file), '/System/Volumes/Preboot/Cryptexes/OS/opt/homebrew/opt/ffmpeg/lib/libavutil.56.dylib' (no such file), '/opt/homebrew/opt/ffmpeg/lib/libavutil.56.dylib' (no such file), '/System/Volumes/Preboot/Cryptexes/OS/opt/homebrew/opt/ffmpeg/lib/libavutil.56.dylib' (no such file), '/opt/homebrew/lib/libavutil.56.dylib' (no such file), '/System/Volumes/Preboot/Cryptexes/OS/opt/homebrew/lib/libavutil.56.dylib' (no such file)
+[end of libtorchcodec loading traceback].
+  warnings.warn(
+/Users/kayoko.namba/venvs/whisperx/lib/python3.11/site-packages/speechbrain/utils/torch_audio_backend.py:57: UserWarning: torchaudio._backend.list_audio_backends has been deprecated. This deprecation is part of a large refactoring effort to transition TorchAudio into a maintenance phase. The decoding and encoding capabilities of PyTorch for both audio and video are being consolidated into TorchCodec. Please see https://github.com/pytorch/audio/issues/3902 for more information. It will be removed from the 2.9 release. 
+  available_backends = torchaudio.list_audio_backends()
+============================================================
+輪読会ファイルのバッチ処理を開始します
+============================================================
+✅ データベーススキーマを作成しました: /Users/kayoko.namba/Desktop/transcription/transcription.db
+
+処理対象ファイル数: 3
+  1. 輪読会#11.mp4
+  2. 輪読会#9.mp4
+  3. 輪読会10.mp4
+
+[1/3] 処理中...
+
+============================================================
+処理開始: 輪読会#11.mp4
+============================================================
+--- ステップ1: WhisperXで文字起こし開始 ---
+2026-03-11 17:03:46 - whisperx.asr - INFO - No language specified, language will be detected for each audio file (increases inference time)
+2026-03-11 17:03:46 - whisperx.vads.pyannote - INFO - Performing voice activity detection using Pyannote...
+Lightning automatically upgraded your loaded checkpoint from v1.5.4 to v2.6.1. To apply the upgrade to your files permanently, run `python -m lightning.pytorch.utilities.upgrade_checkpoint ../../venvs/whisperx/lib/python3.11/site-packages/whisperx/assets/pytorch_model.bin`
+/Users/kayoko.namba/venvs/whisperx/lib/python3.11/site-packages/transformers/configuration_utils.py:312: UserWarning: Passing `gradient_checkpointing` to a config initialization is deprecated and will be removed in v5 Transformers. Using `model.gradient_checkpointing_enable()` instead, or if you are using the `Trainer` API, pass `gradient_checkpointing=True` in your `TrainingArguments`.
+  warnings.warn(
+--- ステップ2: タイムスタンプを補正 ---
+--- ステップ3: 話者分離を実行 ---
+音声の長さ: 385.88 秒
+2026-03-11 17:07:08 - whisperx.diarize - INFO - Loading diarization model: pyannote/speaker-diarization-community-1
+/Users/kayoko.namba/venvs/whisperx/lib/python3.11/site-packages/pyannote/audio/models/blocks/pooling.py:103: UserWarning: std(): degrees of freedom is <= 0. Correction should be strictly less than the reduction factor (input numel divided by output numel). (Triggered internally at /Users/runner/work/pytorch/pytorch/pytorch/aten/src/ATen/native/ReduceOps.cpp:1839.)
+  std = sequences.std(dim=-1, correction=1)
+diarizationの終了時間を 385.88 秒に延長しました
+--- ステップ4: データベースに保存 ---
+✅ 輪読会#11.mp4 の処理が完了しました（18セグメント）
+
+[2/3] 処理中...
+
+============================================================
+処理開始: 輪読会#9.mp4
+============================================================
+--- ステップ1: WhisperXで文字起こし開始 ---
+2026-03-11 17:12:03 - whisperx.asr - INFO - No language specified, language will be detected for each audio file (increases inference time)
+2026-03-11 17:12:03 - whisperx.vads.pyannote - INFO - Performing voice activity detection using Pyannote...
+Lightning automatically upgraded your loaded checkpoint from v1.5.4 to v2.6.1. To apply the upgrade to your files permanently, run `python -m lightning.pytorch.utilities.upgrade_checkpoint ../../venvs/whisperx/lib/python3.11/site-packages/whisperx/assets/pytorch_model.bin`
+/Users/kayoko.namba/venvs/whisperx/lib/python3.11/site-packages/transformers/configuration_utils.py:312: UserWarning: Passing `gradient_checkpointing` to a config initialization is deprecated and will be removed in v5 Transformers. Using `model.gradient_checkpointing_enable()` instead, or if you are using the `Trainer` API, pass `gradient_checkpointing=True` in your `TrainingArguments`.
+  warnings.warn(
+--- ステップ2: タイムスタンプを補正 ---
+--- ステップ3: 話者分離を実行 ---
+音声の長さ: 400.21 秒
+2026-03-11 17:15:53 - whisperx.diarize - INFO - Loading diarization model: pyannote/speaker-diarization-community-1
+/Users/kayoko.namba/venvs/whisperx/lib/python3.11/site-packages/pyannote/audio/models/blocks/pooling.py:103: UserWarning: std(): degrees of freedom is <= 0. Correction should be strictly less than the reduction factor (input numel divided by output numel). (Triggered internally at /Users/runner/work/pytorch/pytorch/pytorch/aten/src/ATen/native/ReduceOps.cpp:1839.)
+  std = sequences.std(dim=-1, correction=1)
+diarizationの終了時間を 400.21 秒に延長しました
+--- ステップ4: データベースに保存 ---
+✅ 輪読会#9.mp4 の処理が完了しました（18セグメント）
+
+[3/3] 処理中...
+
+============================================================
+処理開始: 輪読会10.mp4
+============================================================
+--- ステップ1: WhisperXで文字起こし開始 ---
+2026-03-11 17:21:07 - whisperx.asr - INFO - No language specified, language will be detected for each audio file (increases inference time)
+2026-03-11 17:21:07 - whisperx.vads.pyannote - INFO - Performing voice activity detection using Pyannote...
+Lightning automatically upgraded your loaded checkpoint from v1.5.4 to v2.6.1. To apply the upgrade to your files permanently, run `python -m lightning.pytorch.utilities.upgrade_checkpoint ../../venvs/whisperx/lib/python3.11/site-packages/whisperx/assets/pytorch_model.bin`
+/Users/kayoko.namba/venvs/whisperx/lib/python3.11/site-packages/transformers/configuration_utils.py:312: UserWarning: Passing `gradient_checkpointing` to a config initialization is deprecated and will be removed in v5 Transformers. Using `model.gradient_checkpointing_enable()` instead, or if you are using the `Trainer` API, pass `gradient_checkpointing=True` in your `TrainingArguments`.
+  warnings.warn(
+--- ステップ2: タイムスタンプを補正 ---
+--- ステップ3: 話者分離を実行 ---
+音声の長さ: 401.71 秒
+2026-03-11 17:24:45 - whisperx.diarize - INFO - Loading diarization model: pyannote/speaker-diarization-community-1
+/Users/kayoko.namba/venvs/whisperx/lib/python3.11/site-packages/pyannote/audio/models/blocks/pooling.py:103: UserWarning: std(): degrees of freedom is <= 0. Correction should be strictly less than the reduction factor (input numel divided by output numel). (Triggered internally at /Users/runner/work/pytorch/pytorch/pytorch/aten/src/ATen/native/ReduceOps.cpp:1839.)
+  std = sequences.std(dim=-1, correction=1)
+diarizationの終了時間を 401.71 秒に延長しました
+--- ステップ4: データベースに保存 ---
+✅ 輪読会10.mp4 の処理が完了しました（18セグメント）
+
+============================================================
+処理結果サマリー
+============================================================
+成功: 3件
+失敗: 0件
+
+✅ データベース: /Users/kayoko.namba/Desktop/transcription/transcription.db

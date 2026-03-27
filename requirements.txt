@@ -1,0 +1,7 @@
+# Streamlit アプリ・文字起こし（WhisperX）用
+# デプロイ先の「Main file」は app.py を指定してください
+streamlit>=1.36.0
+python-dotenv>=1.0.0
+openai>=1.0.0
+yt-dlp>=2024.1.0
+whisperx

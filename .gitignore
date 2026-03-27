@@ -1,0 +1,19 @@
+# 環境変数（APIキー等を含む）
+.env
+
+# Python / 仮想環境
+venv/
+.venv/
+__pycache__/
+*.py[cod]
+
+# ドキュメント（Git に含めない）
+docs/
+
+# ローカルデータ（リポジトリに含めない）
+uploads/
+transcription.db
+*.db-journal
+
+# OS
+.DS_Store
