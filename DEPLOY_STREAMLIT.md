@@ -20,6 +20,14 @@
 
 ---
 
+## `np.NaN` / `AttributeError`（pyannote.audio × NumPy 2）
+
+**NumPy 2.0** 以降で **`np.NaN`** が削除され、**pyannote.audio** の `Inference` などが **`missing: float = np.NaN`** のようにクラス定義で参照していると、**import 時に `AttributeError`** になる。
+
+**対処:** **`numpy>=1.26,<2`** を **`requirements.txt`** に明示し、**`pyproject.toml` の override-dependencies** にも **`numpy>=1.26,<2`** を入れてある。push して再デプロイする。
+
+---
+
 ## `AV_OPT_TYPE_CHANNEL_LAYOUT` / `av` のビルド失敗（gcc）
 
 `av==11` をソースビルドすると、**OS の FFmpeg ライブラリのバージョン**と PyAV 11 の C コードが合わず（例: `AV_OPT_TYPE_CHANNEL_LAYOUT` 未定義）、**gcc で失敗**することがあります。

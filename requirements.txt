@@ -17,4 +17,6 @@ openai>=1.0.0
 yt-dlp>=2024.1.0
 
 # PyPI の安定版に固定（解決の再現性を上げる）
+# NumPy 2.x は pyannote.audio（whisperx 依存）の np.NaN 参照と非互換（numpy<2 を pyproject と揃える）
+numpy>=1.26,<2
 whisperx==3.2.0

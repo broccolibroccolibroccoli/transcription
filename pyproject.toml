@@ -15,6 +15,9 @@ description = "WhisperX Streamlit app (uv overrides for PyAV / faster-whisper on
 # pyannote.audio 3.1.1（whisperx 依存）が torchaudio.set_audio_backend("soundfile") を呼ぶが、
 # torchaudio 2.4+ で API 削除 → AttributeError。2.3 系に固定して互換を取る。
 # 参考: https://github.com/pyannote/pyannote-audio/issues/1576
+#
+# NumPy 2.0 以降で np.NaN が削除され、pyannote.audio が class 定義で np.NaN を参照すると
+# AttributeError（Inference 等）。numpy 1.x に固定する。
 [tool.uv]
 override-dependencies = [
     "faster-whisper==1.0.3",
@@ -22,4 +25,5 @@ override-dependencies = [
     "ctranslate2>=4.6.1,<5",
     "torch==2.3.1",
     "torchaudio==2.3.1",
+    "numpy>=1.26,<2",
 ]
