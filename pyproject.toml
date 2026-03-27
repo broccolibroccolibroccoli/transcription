@@ -8,8 +8,12 @@ description = "WhisperX Streamlit app (uv overrides for PyAV / faster-whisper on
 # whisperx が固定する faster-whisper==1.0.0 → av 11 はソースビルドになり、
 # 新しい FFmpeg ヘッダと衝突（AV_OPT_TYPE_CHANNEL_LAYOUT 等）する。
 # 以下で av 12（cp312 用ホイール）と faster-whisper 1.0.3 に上書きする。
+# ctranslate2==4.4.0 の .so は executable stack 付きで、glibc 2.41+ の環境で
+# 「cannot enable executable stack ... Invalid argument」になる（OpenNMT/CTranslate2 #1849）。
+# 4.6 以降で -Wl,-z,noexecstack 修正が入ったビルドを使う。
 [tool.uv]
 override-dependencies = [
     "faster-whisper==1.0.3",
     "av==12.3.0",
+    "ctranslate2>=4.6.1,<5",
 ]

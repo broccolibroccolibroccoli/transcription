@@ -1,5 +1,15 @@
 # Streamlit Community Cloud でのデプロイ（トラブルシュート）
 
+## `libctranslate2-...so: cannot enable executable stack` / `Invalid argument`
+
+**glibc 2.41 以降**では、古い **ctranslate2** の共有ライブラリに付いた **executable stack** が読み込み拒否されることがあります（実行時、`batch_process` で `import whisperx` した直後に出る）。
+
+**対処:** リポジトリの **`pyproject.toml`** で **`ctranslate2>=4.6.1,<5`** に **override** している（修正ビルド）。変更を push して再デプロイする。
+
+参考: [OpenNMT/CTranslate2 #1849](https://github.com/OpenNMT/CTranslate2/issues/1849)
+
+---
+
 ## `AV_OPT_TYPE_CHANNEL_LAYOUT` / `av` のビルド失敗（gcc）
 
 `av==11` をソースビルドすると、**OS の FFmpeg ライブラリのバージョン**と PyAV 11 の C コードが合わず（例: `AV_OPT_TYPE_CHANNEL_LAYOUT` 未定義）、**gcc で失敗**することがあります。
