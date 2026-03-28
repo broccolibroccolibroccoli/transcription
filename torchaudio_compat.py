@@ -6,7 +6,7 @@ PyTorch 2.6+ の torch.load(weights_only=True) で pickle に含まれる型を�
 import torch
 from typing import Any
 
-torch.serialization.add_safe_globals([Any])
+torch.serialization.add_safe_globals([Any, list])
 
 try:
     from omegaconf import DictConfig, ListConfig
