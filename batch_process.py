@@ -4,7 +4,38 @@
 """
 import torchaudio_compat  # noqa: F401 — whisperx より先（pyannote が torchaudio を参照するため）
 import whisperx
+import whisperx.asr as _wx_asr
 import whisperx.diarize
+
+
+def _patch_whisperx_load_model_hotwords() -> None:
+    """faster-whisper 1.1+ の TranscriptionOptions は hotwords 必須。
+    whisperx は asr_options でマージするが、load_model の参照が asr 直とズレると未マージのまま呼ばれる。
+    whisperx.load_model と whisperx.asr.load_model の両方をラップする。
+    参考: https://github.com/m-bain/whisperX/issues/918
+    """
+
+    def _wrap(orig):
+        def _inner(*args, **kwargs):
+            opts = kwargs.get("asr_options")
+            merged = dict(opts) if opts else {}
+            merged.setdefault("hotwords", None)
+            kwargs["asr_options"] = merged
+            return orig(*args, **kwargs)
+
+        return _inner
+
+    _orig_top = whisperx.load_model
+    _orig_asr = _wx_asr.load_model
+    wrapped = _wrap(_orig_asr)
+    _wx_asr.load_model = wrapped
+    if _orig_top is _orig_asr:
+        whisperx.load_model = wrapped
+    else:
+        whisperx.load_model = _wrap(_orig_top)
+
+
+_patch_whisperx_load_model_hotwords()
 import json
 import re
 import gc

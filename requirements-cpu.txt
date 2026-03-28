@@ -4,6 +4,7 @@
 # pyannote.audio / whisperx を NumPy 2.x と併用しない（np.NaN 削除）
 numpy>=1.26,<2
 matplotlib>=3.7
+faster-whisper==1.0.3
 streamlit>=1.36.0
 python-dotenv>=1.0.0
 openai>=1.0.0

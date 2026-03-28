@@ -43,7 +43,12 @@
 
 **faster-whisper 1.1 以降**で **`TranscriptionOptions`** に **`hotwords`** が追加され、**WhisperX 3.2.0** 単体のデフォルト指定と食い違うと **`TypeError`** になる。
 
-**対処:** **`batch_process.py`** の **`whisperx.load_model(..., asr_options={"hotwords": None})`** を指定済み。参考: [whisperX#918](https://github.com/m-bain/whisperX/issues/918)
+**対処（本リポジトリ）**
+
+- **`batch_process.py`** で **`import whisperx` 直後**に **`whisperx.load_model` / `whisperx.asr.load_model`** をラップし、**`asr_options` に常に `hotwords` を入れる**（参照が分かれている環境向け）。
+- **`requirements.txt`** に **`faster-whisper==1.0.3`** を明示（**`pyproject.toml` の override** と一致）。
+
+参考: [whisperX#918](https://github.com/m-bain/whisperX/issues/918)
 
 ---
 
