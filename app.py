@@ -828,10 +828,21 @@ def process_uploaded_file(uploaded_file, project_id: int = 1):
                 "requirements.txt に torch / torchaudio / whisperx が含まれているか再デプロイしてください。"
             ),
         }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": f"バッチ処理モジュールの読み込みに失敗しました: {e!s}",
+        }
     from database_schema import create_database_schema
 
     create_database_schema(DB_PATH)
-    return process_audio_file(save_path, DB_PATH, project_id=project_id)
+    try:
+        return process_audio_file(save_path, DB_PATH, project_id=project_id)
+    except Exception as e:
+        return {
+            "success": False,
+            "error": f"文字起こし処理で例外が発生しました: {e!s}",
+        }
 
 
 def process_youtube_url(url: str, project_id: int = 1):
@@ -987,12 +998,24 @@ with st.sidebar:
                 expected_end = estimate_completion_time(duration_sec)
                 expected_str = expected_end.strftime("%Y/%m/%d %H:%M頃")
                 spinner_msg = f"処理中...\n\n完了予定: {expected_str}"
-                with st.spinner(spinner_msg):
-                    result = process_uploaded_file(uploaded, project_id=st.session_state.selected_project_id)
+                try:
+                    with st.spinner(spinner_msg):
+                        result = process_uploaded_file(
+                            uploaded, project_id=st.session_state.selected_project_id
+                        )
+                except Exception as e:
+                    st.error(
+                        "処理が中断されました。Streamlit Community Cloud では **メモリ不足（OOM）** で"
+                        "プロセスが落ちると「Oh no」とだけ出ることがあります。"
+                        " Secrets に **TRANSCRIPTION_SKIP_DIARIZATION = \"true\"** や "
+                        "**WHISPERX_ASR_MODEL = \"base\"** を試してください。"
+                    )
+                    st.exception(e)
+                    result = {"success": False}
                 if result.get("success"):
                     st.success(f"✅ {result.get('filename')} の処理が完了しました")
                     st.rerun()
-                else:
+                elif result.get("error"):
                     st.error(f"❌ エラー: {result.get('error', 'Unknown error')}")
 
     if SHOW_YOUTUBE_UPLOAD:

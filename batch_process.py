@@ -5,7 +5,6 @@
 import torchaudio_compat  # noqa: F401 — whisperx より先（pyannote が torchaudio を参照するため）
 import whisperx
 import whisperx.asr as _wx_asr
-import whisperx.diarize
 
 
 def _patch_whisperx_load_model_hotwords() -> None:
@@ -58,8 +57,12 @@ except ImportError:
 BASE_DIR = os.environ.get("TRANSCRIPTION_BASE_DIR", os.path.dirname(os.path.abspath(__file__)))
 DB_PATH = os.path.join(BASE_DIR, "transcription.db")
 device = "cpu"
-batch_size = 4
-compute_type = "float32"
+# メモリが厳しいときは WHISPERX_BATCH_SIZE=1、WHISPERX_COMPUTE_TYPE=int8（CPU）を試す
+try:
+    batch_size = max(1, int(os.environ.get("WHISPERX_BATCH_SIZE", "4")))
+except ValueError:
+    batch_size = 4
+compute_type = os.environ.get("WHISPERX_COMPUTE_TYPE", "float32")
 
 # 辞書登録
 correction_dict = {
@@ -75,6 +78,47 @@ HF_TOKEN = os.environ.get("HF_TOKEN", "")
 
 # ASR モデル名（WhisperX）。Streamlit Cloud 等で OOM する場合は base / small を指定
 WHISPER_MODEL = os.environ.get("WHISPERX_ASR_MODEL", "large-v3")
+
+# 話者分離（pyannote / Lightning）はメモリを多く使う。Community Cloud 等で OOM→「Oh no」になる場合は true
+def _env_truthy(name: str) -> bool:
+    return os.environ.get(name, "").strip().lower() in ("1", "true", "yes", "on")
+
+
+SKIP_DIARIZATION = _env_truthy("TRANSCRIPTION_SKIP_DIARIZATION")
+DEFAULT_SPEAKER_WHEN_SKIPPED = os.environ.get("TRANSCRIPTION_DEFAULT_SPEAKER", "SPEAKER_00")
+
+# pyannote パイプライン名（WhisperX / pyannote の対応表に合わせる）。未設定は WhisperX 既定に任せる
+WHISPERX_DIARIZE_MODEL = os.environ.get("WHISPERX_DIARIZE_MODEL", "").strip()
+
+
+def _free_align_model(model_align, metadata) -> None:
+    """話者分離の前にアライメント用モデルを解放し、ピークメモリを下げる。"""
+    del model_align
+    del metadata
+    gc.collect()
+    try:
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+    except Exception:
+        pass
+
+
+def _build_diarization_pipeline():
+    """WhisperX の DiarizationPipeline の引数名差（token / use_auth_token）に耐える。"""
+    kwargs = {"device": device}
+    if HF_TOKEN:
+        kwargs["token"] = HF_TOKEN
+    if WHISPERX_DIARIZE_MODEL:
+        kwargs["model_name"] = WHISPERX_DIARIZE_MODEL
+    from whisperx.diarize import DiarizationPipeline
+
+    try:
+        return DiarizationPipeline(**kwargs)
+    except TypeError:
+        kwargs.pop("token", None)
+        if HF_TOKEN:
+            kwargs["use_auth_token"] = HF_TOKEN
+        return DiarizationPipeline(**kwargs)
 
 
 def get_audio_files(base_dir: str) -> List[str]:
@@ -156,34 +200,38 @@ def process_audio_file(audio_file: str, db_path: str, project_id: int = 1) -> Di
         print("--- ステップ2: タイムスタンプを補正 ---")
         model_a, metadata = whisperx.load_align_model(language_code="ja", device=device)
         result = whisperx.align(result["segments"], model_a, metadata, audio, device, return_char_alignments=False)
-        
+
+        _free_align_model(model_a, metadata)
+
         # --- 3. 話者分離 (Diarization) ---
-        print("--- ステップ3: 話者分離を実行 ---")
-        
-        # 音声の実際の長さを取得（サンプリングレート16kHz）
         audio_duration = len(audio) / 16000
         print(f"音声の長さ: {audio_duration:.2f} 秒")
-        
-        diarize_model = whisperx.diarize.DiarizationPipeline(
-            token=HF_TOKEN,
-            device=device
-        )
-        
-        diarize_segments = diarize_model(audio, min_speakers=2, max_speakers=2)
-        
-        # diarize_segmentsの末尾を音声終端まで延ばす
-        if len(diarize_segments) > 0:
-            last_idx = diarize_segments.index[-1]
-            diarize_segments.at[last_idx, "end"] = audio_duration
-            print(f"diarizationの終了時間を {audio_duration:.2f} 秒に延長しました")
-        
-        # fill_nearest=True で話者未割当セグメントを近傍から補完
-        result = whisperx.assign_word_speakers(
-            diarize_segments,
-            result,
-            fill_nearest=True
-        )
-        
+
+        if SKIP_DIARIZATION:
+            print(
+                "--- ステップ3: 話者分離をスキップ（TRANSCRIPTION_SKIP_DIARIZATION） ---"
+            )
+            for seg in result["segments"]:
+                seg["speaker"] = DEFAULT_SPEAKER_WHEN_SKIPPED
+        else:
+            print("--- ステップ3: 話者分離を実行 ---")
+            diarize_model = _build_diarization_pipeline()
+
+            diarize_segments = diarize_model(audio, min_speakers=2, max_speakers=2)
+
+            if len(diarize_segments) > 0:
+                last_idx = diarize_segments.index[-1]
+                diarize_segments.at[last_idx, "end"] = audio_duration
+                print(f"diarizationの終了時間を {audio_duration:.2f} 秒に延長しました")
+
+            result = whisperx.assign_word_speakers(
+                diarize_segments,
+                result,
+                fill_nearest=True,
+            )
+            del diarize_model
+            gc.collect()
+
         # --- 4. データベースへの保存 ---
         print("--- ステップ4: データベースに保存 ---")
         
