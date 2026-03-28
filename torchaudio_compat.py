@@ -1,8 +1,12 @@
 """
 torchaudio 2.4+ では set_audio_backend / get_audio_backend が削除されるが、
 pyannote.audio 3.1 系が import 時に参照する。whisperx を import する前にこのモジュールを読み込む。
+PyTorch 2.6+ の torch.load(weights_only=True) で pickle に含まれる型を許可する。
 """
 import torch
+from typing import Any
+
+torch.serialization.add_safe_globals([Any])
 
 try:
     from omegaconf import DictConfig, ListConfig
