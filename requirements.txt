@@ -23,6 +23,6 @@ faster-whisper==1.0.3
 numpy>=1.26,<2
 # pyannote / whisperx 系が import 時に参照（PyPI のメタデータでは必須になっていないことがある）
 matplotlib>=3.7
-# torch 2.4.1 と揃える。transformers + Streamlit ウォッチャー経由で間接 import される
-torchvision==0.19.1
+# torch 2.6.0 と揃える（日本語アライメント用 wav2vec2 の .bin 読み込みに torch 2.6+ が必要な場合がある）
+torchvision==0.21.0
 whisperx==3.2.0

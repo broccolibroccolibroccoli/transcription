@@ -22,14 +22,17 @@ description = "WhisperX Streamlit app (uv overrides for PyAV / faster-whisper on
 #
 # torchvision: transformers 5.x の一部サブモジュールが参照。Streamlit のファイルウォッチャーが
 # transformers を走査すると間接 import され ModuleNotFoundError になることがある。
-# torch 2.4.1 に合わせて 0.19.1 を固定。
+#
+# torch 2.6+ : transformers が wav2vec2 の pytorch_model.bin を読む際、2.6 未満だと拒否され
+# 日本語アライメント（jonatasgrosman/...）が「モデルが見つからない」と誤表示される（whisperX#1219）。
+# torch 2.6.0 に合わせて 0.21.0 を固定。
 [tool.uv]
 override-dependencies = [
     "faster-whisper==1.0.3",
     "av==12.3.0",
     "ctranslate2>=4.6.1,<5",
-    "torch==2.4.1",
-    "torchaudio==2.4.1",
-    "torchvision==0.19.1",
+    "torch==2.6.0",
+    "torchaudio==2.6.0",
+    "torchvision==0.21.0",
     "numpy>=1.26,<2",
 ]

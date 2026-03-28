@@ -90,6 +90,11 @@ DEFAULT_SPEAKER_WHEN_SKIPPED = os.environ.get("TRANSCRIPTION_DEFAULT_SPEAKER", "
 # pyannote パイプライン名（WhisperX / pyannote の対応表に合わせる）。未設定は WhisperX 既定に任せる
 WHISPERX_DIARIZE_MODEL = os.environ.get("WHISPERX_DIARIZE_MODEL", "").strip()
 
+# アライメント用 wav2vec2（HF モデル ID）。未設定は WhisperX 既定（日本語は jonatasgrosman/...）
+WHISPERX_ALIGN_MODEL = os.environ.get("WHISPERX_ALIGN_MODEL", "").strip()
+# true のときステップ2アライメントを省略（Whisper セグメントの時刻のまま。torch/モデル不整合時の回避用）
+SKIP_ALIGN = _env_truthy("TRANSCRIPTION_SKIP_ALIGN")
+
 
 def _free_align_model(model_align, metadata) -> None:
     """話者分離の前にアライメント用モデルを解放し、ピークメモリを下げる。"""
@@ -197,11 +202,25 @@ def process_audio_file(audio_file: str, db_path: str, project_id: int = 1) -> Di
         gc.collect()
         
         # --- 2. タイムスタンプの補正 (Alignment) ---
-        print("--- ステップ2: タイムスタンプを補正 ---")
-        model_a, metadata = whisperx.load_align_model(language_code="ja", device=device)
-        result = whisperx.align(result["segments"], model_a, metadata, audio, device, return_char_alignments=False)
-
-        _free_align_model(model_a, metadata)
+        if SKIP_ALIGN:
+            print(
+                "--- ステップ2: アライメントをスキップ（TRANSCRIPTION_SKIP_ALIGN） ---"
+            )
+        else:
+            print("--- ステップ2: タイムスタンプを補正 ---")
+            _align_kw: dict = {"language_code": "ja", "device": device}
+            if WHISPERX_ALIGN_MODEL:
+                _align_kw["model_name"] = WHISPERX_ALIGN_MODEL
+            model_a, metadata = whisperx.load_align_model(**_align_kw)
+            result = whisperx.align(
+                result["segments"],
+                model_a,
+                metadata,
+                audio,
+                device,
+                return_char_alignments=False,
+            )
+            _free_align_model(model_a, metadata)
 
         # --- 3. 話者分離 (Diarization) ---
         audio_duration = len(audio) / 16000

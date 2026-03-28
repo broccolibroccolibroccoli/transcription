@@ -17,7 +17,7 @@
 **対処（本リポジトリ）**
 
 - **`torchaudio_compat.py`** を **`import whisperx` より前**に読み込み、削除された API を no-op で補う（`batch_process.py` / `get_audio_duration_seconds`）。
-- **`pyproject.toml`** の override で **`torch==2.4.1`** と **`torchaudio==2.4.1`**（**transformers** が **PyTorch≥2.4** を要求するため、2.3 固定はログに「Disabling PyTorch」が出る）。
+- **`pyproject.toml`** の override で **`torch==2.6.0`** / **`torchaudio==2.6.0`** / **`torchvision==0.21.0`**（**transformers** の要件と、日本語アライメント用 wav2vec2 の読み込みに **torch 2.6+** が必要な場合がある）。
 
 参考: [pyannote/pyannote-audio#1576](https://github.com/pyannote/pyannote-audio/issues/1576)
 
@@ -39,6 +39,18 @@
 
 ---
 
+## 日本語アライメント「align_model could not be found」（wav2vec2 / torch）
+
+ログや UI に **`jonatasgrosman/wav2vec2-large-xlsr-53-japanese` が見つからない**と出る場合、モデルが無いのではなく、**`transformers` が古い `pytorch_model.bin` を `torch.load` で読む際に torch 2.6 未満を拒否**し、WhisperX が誤った `ValueError` を出していることがある（[whisperX#1219](https://github.com/m-bain/whisperX/issues/1219)）。
+
+**対処（本リポジトリ）:** **`pyproject.toml` の override** で **`torch==2.6.0`** / **`torchaudio==2.6.0`** / **`torchvision==0.21.0`** に揃えている。push して再デプロイする。
+
+**どうしてもアライメントを使わない場合（暫定）:** Secrets に **`TRANSCRIPTION_SKIP_ALIGN = "true"`**（Whisper のセグメント時刻のまま。単語単位の精度は下がる）。
+
+**別の HF モデルを試す場合:** **`WHISPERX_ALIGN_MODEL`** に wav2vec2 系のモデル ID を指定。
+
+---
+
 ## `TranscriptionOptions... missing ... 'hotwords'`（faster-whisper / WhisperX）
 
 **faster-whisper 1.1 以降**で **`TranscriptionOptions`** に **`hotwords`** が追加され、**WhisperX 3.2.0** 単体のデフォルト指定と食い違うと **`TypeError`** になる。
@@ -56,7 +68,7 @@
 
 **transformers** の一部モデルコードが **`torchvision`** を import する。**Streamlit** の **ファイルウォッチャー**が `transformers` パッケージを走査すると、間接的にその import が走り、**未インストールだと `ModuleNotFoundError`** になる（ログに `Examining the path of transformers.models...` と続く）。
 
-**対処:** **`torchvision==0.19.1`** を **`torch==2.4.1`** と揃えて **`requirements.txt`** および **`pyproject.toml` の override-dependencies** に含めている。push して再デプロイする。
+**対処:** **`torchvision==0.21.0`** を **`torch==2.6.0`** と揃えて **`requirements.txt`** および **`pyproject.toml` の override-dependencies** に含めている。push して再デプロイする。
 
 ---
 
@@ -129,8 +141,9 @@ openai>=1.0.0
 yt-dlp>=2024.1.0
 
 --extra-index-url https://download.pytorch.org/whl/cpu
-torch==2.4.1+cpu
-torchaudio==2.4.1+cpu
+torch==2.6.0+cpu
+torchaudio==2.6.0+cpu
+torchvision==0.21.0+cpu
 
 whisperx==3.2.0
 ```
