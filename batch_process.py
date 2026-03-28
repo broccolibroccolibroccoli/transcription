@@ -2,7 +2,8 @@
 輪読会ファイルのバッチ処理スクリプト
 複数の音声ファイルを処理してデータベースに保存します。
 """
-import torchaudio_compat  # noqa: F401 — whisperx より先（pyannote が torchaudio を参照するため）
+import torchaudio_compat  # noqa: F401 — torch.load(OmegaConf) / torchaudio / whisperx より先
+import torch
 import whisperx
 import whisperx.asr as _wx_asr
 
@@ -38,7 +39,6 @@ _patch_whisperx_load_model_hotwords()
 import json
 import re
 import gc
-import torch
 import numpy as np
 import sqlite3
 import os
