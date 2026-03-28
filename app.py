@@ -951,39 +951,49 @@ with st.sidebar:
     st.divider()
 
     def _render_file_uploader_sidebar():
-        uploaded = st.file_uploader(
-            " ",
-            type=["mp4", "wav", "mp3", "m4a", "flac"],
-            label_visibility="collapsed",
-            help="mp4, wav, mp3, m4a, flac 形式に対応",
-            key="sidebar_file_uploader"
-        )
+        # st.button + file_uploader の組み合わせでは、クリック時のリランで uploaded が None になり得る。
+        # st.form + form_submit_button なら同一送信でファイルと処理を結べる。
+        with st.form("sidebar_transcription_form", clear_on_submit=False):
+            uploaded = st.file_uploader(
+                " ",
+                type=["mp4", "wav", "mp3", "m4a", "flac"],
+                label_visibility="collapsed",
+                help="mp4, wav, mp3, m4a, flac 形式に対応",
+                key="sidebar_file_uploader",
+            )
+            _, col_btn, _ = st.columns([1, 2, 1])
+            with col_btn:
+                submitted = st.form_submit_button(
+                    "🚀 文字起こしを開始",
+                    type="primary",
+                    use_container_width=True,
+                )
         components.html(DRAG_OVERLAY_HTML, height=0)
         st.markdown(
             '<p style="text-align: center; color: #64748B; font-size: 0.8rem; margin: 0.2rem 0;">'
             '1ファイル最大30分、200MBまで</p>'
             '<p style="text-align: center; color: #64748B; font-size: 0.8rem; margin: 0.1rem 0;">'
             'mp4, wav, mp3, m4a, flacなどの音声ファイルに対応</p>',
-            unsafe_allow_html=True
+            unsafe_allow_html=True,
         )
-        if uploaded is not None:
-            _, col_btn, _ = st.columns([1, 2, 1])
-            with col_btn:
-                if st.button("🚀 文字起こしを開始", type="primary", key="sidebar_transcription_start"):
-                    save_path = os.path.join(UPLOADS_DIR, uploaded.name)
-                    with open(save_path, "wb") as f:
-                        f.write(uploaded.getvalue())
-                    duration_sec = get_audio_duration_seconds(save_path)
-                    expected_end = estimate_completion_time(duration_sec)
-                    expected_str = expected_end.strftime("%Y/%m/%d %H:%M頃")
-                    spinner_msg = f"処理中...\n\n完了予定: {expected_str}"
-                    with st.spinner(spinner_msg):
-                        result = process_uploaded_file(uploaded, project_id=st.session_state.selected_project_id)
-                    if result.get("success"):
-                        st.success(f"✅ {result.get('filename')} の処理が完了しました")
-                        st.rerun()
-                    else:
-                        st.error(f"❌ エラー: {result.get('error', 'Unknown error')}")
+        if submitted:
+            if uploaded is None:
+                st.warning("音声ファイルを選択してから「文字起こしを開始」を押してください。")
+            else:
+                save_path = os.path.join(UPLOADS_DIR, uploaded.name)
+                with open(save_path, "wb") as f:
+                    f.write(uploaded.getvalue())
+                duration_sec = get_audio_duration_seconds(save_path)
+                expected_end = estimate_completion_time(duration_sec)
+                expected_str = expected_end.strftime("%Y/%m/%d %H:%M頃")
+                spinner_msg = f"処理中...\n\n完了予定: {expected_str}"
+                with st.spinner(spinner_msg):
+                    result = process_uploaded_file(uploaded, project_id=st.session_state.selected_project_id)
+                if result.get("success"):
+                    st.success(f"✅ {result.get('filename')} の処理が完了しました")
+                    st.rerun()
+                else:
+                    st.error(f"❌ エラー: {result.get('error', 'Unknown error')}")
 
     if SHOW_YOUTUBE_UPLOAD:
         tab_file, tab_youtube = st.tabs(["📁 ファイル", "▶️ YouTube URL"])
