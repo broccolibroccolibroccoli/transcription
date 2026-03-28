@@ -39,6 +39,14 @@
 
 ---
 
+## `TranscriptionOptions... missing ... 'hotwords'`（faster-whisper / WhisperX）
+
+**faster-whisper 1.1 以降**で **`TranscriptionOptions`** に **`hotwords`** が追加され、**WhisperX 3.2.0** 単体のデフォルト指定と食い違うと **`TypeError`** になる。
+
+**対処:** **`batch_process.py`** の **`whisperx.load_model(..., asr_options={"hotwords": None})`** を指定済み。参考: [whisperX#918](https://github.com/m-bain/whisperX/issues/918)
+
+---
+
 ## `No module named 'torchvision'`（transformers / Streamlit ウォッチャー）
 
 **transformers** の一部モデルコードが **`torchvision`** を import する。**Streamlit** の **ファイルウォッチャー**が `transformers` パッケージを走査すると、間接的にその import が走り、**未インストールだと `ModuleNotFoundError`** になる（ログに `Examining the path of transformers.models...` と続く）。
