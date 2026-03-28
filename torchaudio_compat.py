@@ -6,8 +6,11 @@ import torch
 
 try:
     from omegaconf import DictConfig, ListConfig
+    from omegaconf.base import ContainerMetadata
 
-    torch.serialization.add_safe_globals([ListConfig, DictConfig])
+    torch.serialization.add_safe_globals(
+        [ListConfig, DictConfig, ContainerMetadata]
+    )
 except Exception:
     pass
 
