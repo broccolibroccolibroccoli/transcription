@@ -4,9 +4,10 @@ pyannote.audio 3.1 系が import 時に参照する。whisperx を import する
 PyTorch 2.6+ の torch.load(weights_only=True) で pickle に含まれる型を許可する。
 """
 import torch
+from collections import defaultdict
 from typing import Any
 
-torch.serialization.add_safe_globals([Any, list])
+torch.serialization.add_safe_globals([Any, list, defaultdict])
 
 try:
     from omegaconf import DictConfig, ListConfig
