@@ -39,6 +39,14 @@
 
 ---
 
+## `No module named 'torchvision'`（transformers / Streamlit ウォッチャー）
+
+**transformers** の一部モデルコードが **`torchvision`** を import する。**Streamlit** の **ファイルウォッチャー**が `transformers` パッケージを走査すると、間接的にその import が走り、**未インストールだと `ModuleNotFoundError`** になる（ログに `Examining the path of transformers.models...` と続く）。
+
+**対処:** **`torchvision==0.19.1`** を **`torch==2.4.1`** と揃えて **`requirements.txt`** および **`pyproject.toml` の override-dependencies** に含めている。push して再デプロイする。
+
+---
+
 ## `AV_OPT_TYPE_CHANNEL_LAYOUT` / `av` のビルド失敗（gcc）
 
 `av==11` をソースビルドすると、**OS の FFmpeg ライブラリのバージョン**と PyAV 11 の C コードが合わず（例: `AV_OPT_TYPE_CHANNEL_LAYOUT` 未定義）、**gcc で失敗**することがあります。

@@ -21,4 +21,6 @@ yt-dlp>=2024.1.0
 numpy>=1.26,<2
 # pyannote / whisperx 系が import 時に参照（PyPI のメタデータでは必須になっていないことがある）
 matplotlib>=3.7
+# torch 2.4.1 と揃える。transformers + Streamlit ウォッチャー経由で間接 import される
+torchvision==0.19.1
 whisperx==3.2.0
