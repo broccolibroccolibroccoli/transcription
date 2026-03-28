@@ -42,6 +42,9 @@ correction_dict = {
 # Hugging Faceトークン（話者分離用。環境変数 HF_TOKEN または .env で設定）
 HF_TOKEN = os.environ.get("HF_TOKEN", "")
 
+# ASR モデル名（WhisperX）。Streamlit Cloud 等で OOM する場合は base / small を指定
+WHISPER_MODEL = os.environ.get("WHISPERX_ASR_MODEL", "large-v3")
+
 
 def get_audio_files(base_dir: str) -> List[str]:
     """
@@ -110,7 +113,7 @@ def process_audio_file(audio_file: str, db_path: str, project_id: int = 1) -> Di
         
         # --- 1. WhisperXによる文字起こし ---
         print("--- ステップ1: WhisperXで文字起こし開始 ---")
-        model = whisperx.load_model("large-v3", device, compute_type=compute_type)
+        model = whisperx.load_model(WHISPER_MODEL, device, compute_type=compute_type)
         audio = whisperx.load_audio(audio_file)
         result = model.transcribe(audio, batch_size=batch_size, language="ja")
         
