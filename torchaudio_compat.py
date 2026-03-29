@@ -7,7 +7,21 @@ import torch
 from collections import defaultdict
 from typing import Any
 
-torch.serialization.add_safe_globals([Any, list, dict, defaultdict])
+# PyTorch 2.6+ weights_only: チェックポイントの pickle に現れやすい型を一括許可
+torch.serialization.add_safe_globals(
+    [
+        Any,
+        list,
+        dict,
+        tuple,
+        int,
+        float,
+        str,
+        bool,
+        set,
+        defaultdict,
+    ]
+)
 
 try:
     from omegaconf import DictConfig, ListConfig
