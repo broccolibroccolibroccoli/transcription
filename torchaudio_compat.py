@@ -7,7 +7,7 @@ import torch
 from collections import defaultdict
 from typing import Any
 
-torch.serialization.add_safe_globals([Any, list, defaultdict])
+torch.serialization.add_safe_globals([Any, list, dict, defaultdict])
 
 try:
     from omegaconf import DictConfig, ListConfig
