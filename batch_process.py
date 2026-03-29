@@ -2,7 +2,7 @@
 輪読会ファイルのバッチ処理スクリプト
 複数の音声ファイルを処理してデータベースに保存します。
 """
-import torchaudio_compat  # noqa: F401 — torch.load(OmegaConf) / torchaudio / whisperx より先
+import torchaudio_compat  # noqa: F401 — torch.load(weights_only=False) / torchaudio / whisperx より先
 import torch
 import whisperx
 import whisperx.asr as _wx_asr

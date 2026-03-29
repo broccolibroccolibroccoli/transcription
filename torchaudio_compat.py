@@ -1,37 +1,22 @@
 """
 torchaudio 2.4+ では set_audio_backend / get_audio_backend が削除されるが、
 pyannote.audio 3.1 系が import 時に参照する。whisperx を import する前にこのモジュールを読み込む。
-PyTorch 2.6+ の torch.load(weights_only=True) で pickle に含まれる型を許可する。
+
+PyTorch 2.6+ では torch.load の既定が weights_only=True になり、
+transformers / pyannote 等のチェックポイント読み込みで失敗することがある。
+信頼できるソースのモデルのみを扱う前提で、weights_only=False に統一する。
 """
 import torch
-from collections import defaultdict
-from typing import Any
 
-# PyTorch 2.6+ weights_only: チェックポイントの pickle に現れやすい型を一括許可
-torch.serialization.add_safe_globals(
-    [
-        Any,
-        list,
-        dict,
-        tuple,
-        int,
-        float,
-        str,
-        bool,
-        set,
-        defaultdict,
-    ]
-)
+_torch_load_orig = torch.load
 
-try:
-    from omegaconf import DictConfig, ListConfig
-    from omegaconf.base import ContainerMetadata
 
-    torch.serialization.add_safe_globals(
-        [ListConfig, DictConfig, ContainerMetadata]
-    )
-except Exception:
-    pass
+def _torch_load_weights_only_false(*args, **kwargs):
+    kwargs["weights_only"] = False
+    return _torch_load_orig(*args, **kwargs)
+
+
+torch.load = _torch_load_weights_only_false
 
 import torchaudio
 
