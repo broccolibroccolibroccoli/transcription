@@ -227,6 +227,13 @@ hr {
     align-self: stretch !important;
     max-width: 100% !important;
 }
+/* 表示順: 1=案内 2=Browse 3=補足2行（flex order） */
+[data-testid="stSidebar"] [data-testid="stFileUploaderDropzone"] > *:first-child {
+    order: 1 !important;
+}
+[data-testid="stSidebar"] [data-testid="stFileUploaderDropzone"] > *:nth-child(2) {
+    order: 2 !important;
+}
 [data-testid="stSidebar"] [data-testid="stFileUploaderDropzoneInstructions"],
 [data-testid="stSidebar"] [data-testid="stFileUploader"] [class*="Instructions"] {
     flex-direction: column !important;
@@ -241,14 +248,15 @@ hr {
 [data-testid="stSidebar"] [data-testid="stFileUploader"] [class*="Instructions"] * {
     display: none !important;
 }
-/* サイドバー: ドロップゾーン内の案内（text-sm 相当・グレー） */
+/* 1. メイン「ファイルをドラッグ＆ドロップ」 */
 [data-testid="stSidebar"] [data-testid="stFileUploaderDropzoneInstructions"]::before,
 [data-testid="stSidebar"] [data-testid="stFileUploader"] [class*="Instructions"]::before {
-    content: "1ファイル最大30分、200MBまで" !important;
+    content: "ファイルをドラッグ＆ドロップ" !important;
     display: block !important;
-    font-size: 0.875rem !important;
-    line-height: 1.45 !important;
-    color: var(--academy-text-muted) !important;
+    font-size: 1rem !important;
+    font-weight: 600 !important;
+    line-height: 1.4 !important;
+    color: var(--academy-slate) !important;
     text-align: center !important;
     width: 100% !important;
     max-width: 100% !important;
@@ -257,19 +265,36 @@ hr {
     white-space: normal !important;
     overflow: visible !important;
 }
+/* 2. 「または」 */
 [data-testid="stSidebar"] [data-testid="stFileUploaderDropzoneInstructions"]::after,
 [data-testid="stSidebar"] [data-testid="stFileUploader"] [class*="Instructions"]::after {
-    content: "mp4, wav, mp3, m4a, flacなどの音声ファイルに対応" !important;
+    content: "または" !important;
     display: block !important;
-    font-size: 0.875rem !important;
-    line-height: 1.45 !important;
+    font-size: 0.78rem !important;
+    line-height: 1.4 !important;
     color: var(--academy-text-muted) !important;
     text-align: center !important;
     width: 100% !important;
     margin-top: 0.35rem !important;
     padding: 0 0.35rem !important;
-    white-space: normal !important;
+    white-space: nowrap !important;
     overflow: visible !important;
+}
+/* 4.5. 補足2行（ボタンの下に配置するため section::after + order:3） */
+[data-testid="stSidebar"] [data-testid="stFileUploaderDropzone"]::after {
+    content: "1ファイル最大30分、200MBまで\\Amp4, wav, mp3, m4a, flacなどの音声ファイルに対応" !important;
+    display: block !important;
+    white-space: pre !important;
+    font-size: 0.75rem !important;
+    line-height: 1.5 !important;
+    color: var(--academy-text-muted) !important;
+    text-align: center !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+    padding: 0 0.35rem !important;
+    order: 3 !important;
+    align-self: stretch !important;
 }
 
 /* メインエリアのファイルアップローダー（使用時）: 同じ2行案内 */
