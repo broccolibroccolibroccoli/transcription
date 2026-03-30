@@ -203,7 +203,7 @@ hr {
     display: none !important;
 }
 
-/* ②③Drag and drop → 日本語案内（サイドバーは縦積み・1行目を nowrap） */
+/* ② 案内エリア：既定の英語文言を非表示にし、疑似要素で日本語を表示（サイドバーは下記で上書き） */
 [data-testid="stFileUploaderDropzoneInstructions"],
 [data-testid="stFileUploader"] [class*="Instructions"] {
     font-size: 0 !important;
@@ -236,60 +236,63 @@ hr {
     flex: 0 1 auto !important;
     width: 100% !important;
 }
-/* Limit 200MB per file 等のサブテキスト（英語）をメインの下に小さく表示 */
-[data-testid="stSidebar"] [data-testid="stFileUploaderDropzoneInstructions"] span,
-[data-testid="stSidebar"] [data-testid="stFileUploaderDropzoneInstructions"] p {
-    white-space: normal !important;
-    text-overflow: unset !important;
-    overflow: visible !important;
-    font-size: 0.68rem !important;
-    line-height: 1.35 !important;
-    color: var(--academy-text-muted) !important;
-    text-align: center !important;
-    display: block !important;
-    width: 100% !important;
-    margin-top: 0.2rem !important;
+/* サイドバー: Drag & drop / Limit / 拡張子リストなどの既定DOMを非表示 */
+[data-testid="stSidebar"] [data-testid="stFileUploaderDropzoneInstructions"] *,
+[data-testid="stSidebar"] [data-testid="stFileUploader"] [class*="Instructions"] * {
+    display: none !important;
 }
-
-[data-testid="stFileUploaderDropzoneInstructions"]::before,
-[data-testid="stFileUploader"] [class*="Instructions"]::before {
-    content: "ファイルをドラッグ&ドロップ\\Aまたは" !important;
-    white-space: pre !important;
-    font-size: 0.88rem !important;
+/* サイドバー: ドロップゾーン内の案内（text-sm 相当・グレー） */
+[data-testid="stSidebar"] [data-testid="stFileUploaderDropzoneInstructions"]::before,
+[data-testid="stSidebar"] [data-testid="stFileUploader"] [class*="Instructions"]::before {
+    content: "1ファイル最大30分、200MBまで" !important;
     display: block !important;
+    font-size: 0.875rem !important;
+    line-height: 1.45 !important;
+    color: var(--academy-text-muted) !important;
     text-align: center !important;
     width: 100% !important;
     max-width: 100% !important;
     box-sizing: border-box !important;
-    padding: 0 0.25rem !important;
+    padding: 0 0.35rem !important;
+    white-space: normal !important;
     overflow: visible !important;
-    line-height: 1.45 !important;
 }
-/* サイドバー: 1行目「ファイルをドラッグ&ドロップ」を1行で（狭いときはやや小さく） */
-[data-testid="stSidebar"] [data-testid="stFileUploaderDropzoneInstructions"]::before,
-[data-testid="stSidebar"] [data-testid="stFileUploader"] [class*="Instructions"]::before {
-    content: "ファイルをドラッグ&ドロップ" !important;
-    white-space: nowrap !important;
-    font-size: clamp(0.72rem, 2.8vw, 0.9rem) !important;
-}
-
 [data-testid="stSidebar"] [data-testid="stFileUploaderDropzoneInstructions"]::after,
 [data-testid="stSidebar"] [data-testid="stFileUploader"] [class*="Instructions"]::after {
-    content: "または" !important;
+    content: "mp4, wav, mp3, m4a, flacなどの音声ファイルに対応" !important;
     display: block !important;
-    font-size: 0.82rem !important;
+    font-size: 0.875rem !important;
+    line-height: 1.45 !important;
+    color: var(--academy-text-muted) !important;
     text-align: center !important;
     width: 100% !important;
     margin-top: 0.35rem !important;
-    white-space: nowrap !important;
+    padding: 0 0.35rem !important;
+    white-space: normal !important;
+    overflow: visible !important;
 }
 
-/* メインエリアのみ: 従来の改行入り案内（サイドバー上書きの後に非サイドバー向け） */
+/* メインエリアのファイルアップローダー（使用時）: 同じ2行案内 */
+.main [data-testid="stFileUploaderDropzoneInstructions"] *,
+.main [data-testid="stFileUploader"] [class*="Instructions"] * {
+    display: none !important;
+}
 .main [data-testid="stFileUploaderDropzoneInstructions"]::before,
 .main [data-testid="stFileUploader"] [class*="Instructions"]::before {
-    content: "ファイルをドラッグ&ドロップ\\Aまたは" !important;
+    content: "1ファイル最大30分、200MBまで\\Amp4, wav, mp3, m4a, flacなどの音声ファイルに対応" !important;
     white-space: pre !important;
-    font-size: 0.95rem !important;
+    font-size: 0.875rem !important;
+    line-height: 1.45 !important;
+    color: var(--academy-text-muted) !important;
+    display: block !important;
+    text-align: center !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+    padding: 0 0.35rem !important;
+}
+.main [data-testid="stFileUploaderDropzoneInstructions"]::after,
+.main [data-testid="stFileUploader"] [class*="Instructions"]::after {
+    content: none !important;
 }
 
 /* 波線枠をwidth100%に、内部は中央揃え */
@@ -318,6 +321,24 @@ hr {
     align-items: center !important;
     justify-content: center !important;
     gap: 0.5rem !important;
+}
+
+/* サイドバー: 「ファイルを選択」ボタンを中央・幅いっぱい */
+[data-testid="stSidebar"] [data-testid="stFileUploaderDropzone"] > span {
+    width: 100% !important;
+    max-width: 100% !important;
+    display: flex !important;
+    justify-content: center !important;
+    align-items: center !important;
+    box-sizing: border-box !important;
+}
+[data-testid="stSidebar"] [data-testid="stFileUploaderDropzone"] button[data-testid="stBaseButton-secondary"],
+[data-testid="stSidebar"] [data-testid="stFileUploaderDropzone"] button:not([kind="primary"]):not([data-testid="stBaseButton-minimal"]) {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
+    box-sizing: border-box !important;
 }
 
 /* ファイルを選択ボタン（Browse）のみ。Remove（×）ボタンは除外 */
@@ -1096,13 +1117,6 @@ with st.sidebar:
                 use_container_width=True,
             )
         components.html(DRAG_OVERLAY_HTML, height=0)
-        st.markdown(
-            '<p style="text-align: center; color: #64748B; font-size: 0.8rem; margin: 0.2rem 0;">'
-            '1ファイル最大30分、200MBまで</p>'
-            '<p style="text-align: center; color: #64748B; font-size: 0.8rem; margin: 0.1rem 0;">'
-            'mp4, wav, mp3, m4a, flacなどの音声ファイルに対応</p>',
-            unsafe_allow_html=True,
-        )
         if submitted:
             if uploaded is None:
                 st.warning("音声ファイルを選択してから「文字起こしを開始」を押してください。")
