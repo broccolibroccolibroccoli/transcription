@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from database_schema import create_database_schema
+from segment_postprocess import fix_speaker_boundary_rows
 
 try:
     from dotenv import load_dotenv
@@ -207,6 +208,7 @@ def process_audio_file(
         utterances = list(transcript.utterances or [])
 
         if utterances:
+            prepared: List[tuple] = []
             for idx, utt in enumerate(utterances):
                 speaker = _format_speaker_label(getattr(utt, "speaker", None))
                 text = (getattr(utt, "text", None) or "").strip()
@@ -217,6 +219,9 @@ def process_audio_file(
                 end_ms = float(getattr(utt, "end", 0) or 0)
                 start_time = start_ms / 1000.0
                 end_time = end_ms / 1000.0
+                prepared.append((idx, speaker, text, start_time, end_time))
+            prepared = fix_speaker_boundary_rows(prepared)
+            for idx, speaker, text, start_time, end_time in prepared:
                 cursor.execute(
                     """
                     INSERT INTO segments

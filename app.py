@@ -12,6 +12,8 @@ import io
 from datetime import datetime, timedelta
 from typing import Optional
 
+from segment_postprocess import fix_speaker_boundary_rows
+
 # 設定（デプロイ時はリポジトリ直下。環境変数 TRANSCRIPTION_BASE_DIR で上書き可）
 BASE_DIR = os.environ.get("TRANSCRIPTION_BASE_DIR", os.path.dirname(os.path.abspath(__file__)))
 DB_PATH = os.path.join(BASE_DIR, "transcription.db")
@@ -1387,6 +1389,7 @@ if st.session_state.selected_file_id is not None:
                             segs_for_csv.append((seg_idx, speaker_val or "UNKNOWN", text_val or text, start, end))
                     else:
                         segs_for_csv = [(i, s or "UNKNOWN", t, st, e) for i, s, t, st, e in segments]
+                    segs_for_csv = fix_speaker_boundary_rows(segs_for_csv)
                     csv_content = segments_to_csv(segs_for_csv)
                     base_name = os.path.splitext(filename)[0]
                     dl_filename = f"{base_name}_文字起こし.csv"
