@@ -21,16 +21,29 @@ except ImportError:
 BASE_DIR = os.environ.get("TRANSCRIPTION_BASE_DIR", os.path.dirname(os.path.abspath(__file__)))
 DB_PATH = os.path.join(BASE_DIR, "transcription.db")
 
-# AssemblyAI speech_models（モデルIDのリスト）: universal=高精度, nano=速度優先（ASSEMBLYAI_SPEECH_MODEL で切替）
+# AssemblyAI speech_models: universal=高精度, nano=速度優先（ASSEMBLYAI_SPEECH_MODEL で切替）
 _SPEECH_MODEL_ENV = "ASSEMBLYAI_SPEECH_MODEL"
 
 
 def _resolve_speech_model_enum(aai: Any) -> Any:
-    """aai.SpeechModel.universal（既定）または nano（速度優先）。speech_models 用に .value で文字列化する。"""
+    """aai.SpeechModel.universal（既定）または nano（速度優先）。speech_models は List[str] のため .value を使用。"""
     raw = os.environ.get(_SPEECH_MODEL_ENV, "universal").strip().lower()
     if raw in ("nano", "speed", "fast"):
         return aai.SpeechModel.nano
     return aai.SpeechModel.universal
+
+
+def clean_japanese_text(text: Optional[str]) -> str:
+    """単語間の不自然なスペースを除去（CSV保存・DB格納前の後処理）。"""
+    if text is None:
+        return ""
+    # 日本語文字間のスペースを除去
+    text = re.sub(r"(?<=[^\x00-\x7F])\s+(?=[^\x00-\x7F])", "", text)
+    # 日本語と英数字の間のスペースも整理
+    text = re.sub(r"(?<=[^\x00-\x7F])\s+(?=[a-zA-Z0-9])", "", text)
+    text = re.sub(r"(?<=[a-zA-Z0-9])\s+(?=[^\x00-\x7F])", "", text)
+    return text
+
 
 # 辞書登録
 correction_dict = {
@@ -111,12 +124,15 @@ def process_audio_file(
 
     aai.settings.api_key = key
     sm = _resolve_speech_model_enum(aai)
+    # TranscriptionConfig.speech_models は List[str]。モデルは universal（既定）または nano
     speech_models: List[str] = [sm.value]
     print(f"speech_models: {speech_models}")
     config = aai.TranscriptionConfig(
         speaker_labels=True,
         language_code="ja",
         speech_models=speech_models,
+        punctuate=True,
+        format_text=True,
     )
 
     conn = sqlite3.connect(db_path)
@@ -184,6 +200,7 @@ def process_audio_file(
                 text = (getattr(utt, "text", None) or "").strip()
                 for original, corrected in correction_dict.items():
                     text = text.replace(original, corrected)
+                text = clean_japanese_text(text)
                 start_ms = float(getattr(utt, "start", 0) or 0)
                 end_ms = float(getattr(utt, "end", 0) or 0)
                 start_time = start_ms / 1000.0
@@ -201,6 +218,7 @@ def process_audio_file(
             full_text = (transcript.text or "").strip()
             for original, corrected in correction_dict.items():
                 full_text = full_text.replace(original, corrected)
+            full_text = clean_japanese_text(full_text)
             cursor.execute(
                 """
                 INSERT INTO segments
