@@ -21,6 +21,17 @@ except ImportError:
 BASE_DIR = os.environ.get("TRANSCRIPTION_BASE_DIR", os.path.dirname(os.path.abspath(__file__)))
 DB_PATH = os.path.join(BASE_DIR, "transcription.db")
 
+# AssemblyAI speech_model: universal=高精度, nano=速度優先（環境変数 ASSEMBLYAI_SPEECH_MODEL で切替）
+_SPEECH_MODEL_ENV = "ASSEMBLYAI_SPEECH_MODEL"
+
+
+def _resolve_speech_model(aai: Any) -> Any:
+    """aai.SpeechModel.universal（既定）または nano（速度優先）。"""
+    raw = os.environ.get(_SPEECH_MODEL_ENV, "universal").strip().lower()
+    if raw in ("nano", "speed", "fast"):
+        return aai.SpeechModel.nano
+    return aai.SpeechModel.universal
+
 # 辞書登録
 correction_dict = {
     "カルテ": "KARTE",
@@ -99,9 +110,12 @@ def process_audio_file(
     print(f"{'=' * 60}")
 
     aai.settings.api_key = key
+    speech_model = _resolve_speech_model(aai)
+    print(f"speech_model: {speech_model.value}")
     config = aai.TranscriptionConfig(
         speaker_labels=True,
         language_code="ja",
+        speech_model=speech_model,
     )
 
     conn = sqlite3.connect(db_path)
