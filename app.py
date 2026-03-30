@@ -216,22 +216,27 @@ hr {
 [data-testid="stSidebar"] [data-testid="stFileUploaderDropzone"] {
     display: flex !important;
     flex-direction: column !important;
-    align-items: center !important;
-    justify-content: center !important;
-    gap: 0.5rem !important;
+    align-items: stretch !important;
+    justify-content: flex-start !important;
+    gap: 0.45rem !important;
     width: 100% !important;
     box-sizing: border-box !important;
     min-width: 0 !important;
+    min-height: fit-content !important;
+    padding: 0.65rem 0.45rem 0.75rem !important;
+    overflow: visible !important;
 }
 [data-testid="stSidebar"] [data-testid="stFileUploaderDropzone"] > * {
     align-self: stretch !important;
     max-width: 100% !important;
 }
-/* 表示順: 1=案内 2=Browse 3=補足2行（flex order） */
-[data-testid="stSidebar"] [data-testid="stFileUploaderDropzone"] > *:first-child {
+/* 表示順: DOM が [Browse, Instructions] のときも正しく並ぶよう testid / ボタンで指定 */
+[data-testid="stSidebar"] [data-testid="stFileUploaderDropzone"] > [data-testid="stFileUploaderDropzoneInstructions"],
+[data-testid="stSidebar"] [data-testid="stFileUploaderDropzone"] > [class*="Instructions"] {
     order: 1 !important;
 }
-[data-testid="stSidebar"] [data-testid="stFileUploaderDropzone"] > *:nth-child(2) {
+[data-testid="stSidebar"] [data-testid="stFileUploaderDropzone"] > span:has(button),
+[data-testid="stSidebar"] [data-testid="stFileUploaderDropzone"] > div:has([data-testid="stBaseButton-secondary"]) {
     order: 2 !important;
 }
 [data-testid="stSidebar"] [data-testid="stFileUploaderDropzoneInstructions"],
@@ -280,19 +285,23 @@ hr {
     white-space: nowrap !important;
     overflow: visible !important;
 }
-/* 4.5. 補足2行（ボタンの下に配置するため section::after + order:3） */
+/* 4.5. 補足2行（ボタンの下・section::after + order:3） */
 [data-testid="stSidebar"] [data-testid="stFileUploaderDropzone"]::after {
     content: "1ファイル最大30分、200MBまで\\Amp4, wav, mp3, m4a, flacなどの音声ファイルに対応" !important;
     display: block !important;
-    white-space: pre !important;
-    font-size: 0.75rem !important;
+    white-space: pre-wrap !important;
+    word-break: break-word !important;
+    overflow-wrap: anywhere !important;
+    font-size: 0.65rem !important;
     line-height: 1.5 !important;
     color: var(--academy-text-muted) !important;
     text-align: center !important;
     width: 100% !important;
     max-width: 100% !important;
     box-sizing: border-box !important;
-    padding: 0 0.35rem !important;
+    padding: 0.15rem 0.4rem 0 !important;
+    margin-top: 0.1rem !important;
+    flex-shrink: 0 !important;
     order: 3 !important;
     align-self: stretch !important;
 }
@@ -343,9 +352,14 @@ hr {
 /* サイドバーは上記より後で再指定（Streamlit 既定の横並び section を確実に縦積みに） */
 [data-testid="stSidebar"] [data-testid="stFileUploader"] [data-testid="stFileUploaderDropzone"] {
     flex-direction: column !important;
-    align-items: center !important;
-    justify-content: center !important;
-    gap: 0.5rem !important;
+    align-items: stretch !important;
+    justify-content: flex-start !important;
+    gap: 0.45rem !important;
+    overflow: visible !important;
+}
+[data-testid="stSidebar"] [data-testid="stFileUploader"] {
+    overflow: visible !important;
+    min-height: 0 !important;
 }
 
 /* サイドバー: 「ファイルを選択」ボタンを中央・幅いっぱい */
