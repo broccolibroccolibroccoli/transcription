@@ -68,11 +68,22 @@ KARTE_ACADEMY_CSS = """
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05) !important;
 }
 
-/* サイドバー */
+/* サイドバー（既定より広く、テキスト・ファイル名が収まりやすくする） */
 [data-testid="stSidebar"] {
     background: var(--academy-card) !important;
     border-right: 1px solid var(--academy-border) !important;
     box-shadow: 2px 0 8px rgba(0, 0, 0, 0.03) !important;
+    min-width: min(100vw, 22rem) !important;
+    box-sizing: border-box !important;
+}
+[data-testid="stSidebar"] > div {
+    min-width: 0 !important;
+    box-sizing: border-box !important;
+}
+[data-testid="stSidebar"] [data-testid="stTabs"],
+[data-testid="stSidebar"] [data-testid="stSelectbox"] {
+    width: 100% !important;
+    max-width: 100% !important;
 }
 
 /* サイドバーヘッダー - transcriptionロゴ */
@@ -192,19 +203,30 @@ hr {
     display: none !important;
 }
 
-/* ②③Drag and drop → ファイルをドラッグ&ドロップ + または */
+/* ②③Drag and drop → ファイルをドラッグ&ドロップ + または（幅内で折り返し・切れ防止） */
 [data-testid="stFileUploaderDropzoneInstructions"],
 [data-testid="stFileUploader"] [class*="Instructions"] {
     font-size: 0 !important;
+    overflow: visible !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
 }
 
 [data-testid="stFileUploaderDropzoneInstructions"]::before,
 [data-testid="stFileUploader"] [class*="Instructions"]::before {
     content: "ファイルをドラッグ&ドロップ\\A\\Aまたは" !important;
-    white-space: pre !important;
+    white-space: pre-line !important;
+    word-break: break-word !important;
+    overflow-wrap: anywhere !important;
     font-size: 0.95rem !important;
     display: block !important;
     text-align: center !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+    padding: 0 0.35rem !important;
+    overflow: visible !important;
+    line-height: 1.5 !important;
 }
 
 /* 波線枠をwidth100%に、内部は中央揃え */
@@ -223,6 +245,8 @@ hr {
     align-items: center !important;
     width: 100% !important;
     box-sizing: border-box !important;
+    overflow: visible !important;
+    min-width: 0 !important;
 }
 
 /* ファイルを選択ボタン（Browse）のみ。Remove（×）ボタンは除外 */
@@ -296,24 +320,43 @@ hr {
     margin: 0.2rem 0 !important;
 }
 
-/* サイドバー 文字起こしを開始ボタン - 左右中央揃え（幅制限解除・改行禁止） */
+/* サイドバー カラム：狭い幅でも縮められるよう min-width を緩和 */
 [data-testid="stSidebar"] [data-testid="column"] {
     flex: 1 1 auto !important;
-    min-width: max-content !important;
+    min-width: 0 !important;
     width: auto !important;
 }
-[data-testid="stSidebar"] [data-testid="stHorizontalBlock"] {
+/* プライマリCTA行のみ中央寄せ（ファイルアップローダー内部の横並びは折り返し許可） */
+[data-testid="stSidebar"] [data-testid="stHorizontalBlock"]:has(button[kind="primary"]),
+[data-testid="stSidebar"] [data-testid="stHorizontalBlock"]:has([data-testid="stBaseButton-primary"]) {
     display: flex !important;
     justify-content: center !important;
     flex-wrap: nowrap !important;
     align-items: center !important;
+    min-width: 0 !important;
 }
-[data-testid="stSidebar"] .stButton > button,
-[data-testid="stSidebar"] [data-testid="stAlert"] p,
+[data-testid="stSidebar"] [data-testid="stHorizontalBlock"]:not(:has(button[kind="primary"])):not(:has([data-testid="stBaseButton-primary"])) {
+    flex-wrap: wrap !important;
+    min-width: 0 !important;
+}
+[data-testid="stSidebar"] .stButton > button[kind="primary"] {
+    white-space: normal !important;
+    word-break: break-word !important;
+    max-width: 100% !important;
+    margin: 0 auto !important;
+}
+[data-testid="stSidebar"] [data-testid="stAlert"] p {
+    white-space: normal !important;
+    word-break: break-word !important;
+    overflow-wrap: anywhere !important;
+    max-width: 100% !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
+}
 [data-testid="stSidebar"] .stSpinner {
-    white-space: nowrap !important;
-    word-break: keep-all !important;
-    width: max-content !important;
+    white-space: normal !important;
+    word-break: break-word !important;
+    max-width: 100% !important;
     margin: 0 auto !important;
 }
 
