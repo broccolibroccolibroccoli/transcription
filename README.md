@@ -16,7 +16,7 @@
 ## クイックサマリー
 
 - **入力**: mp4, wav, mp3, m4a, flac などの音声ファイル
-- **処理**: WhisperX による文字起こし + 話者分離
+- **処理**: AssemblyAI API による文字起こし + 話者分離（サーバー側に GPU/torch 不要）
 - **出力**: 文字起こしテキスト + LLMによる要約
 - **UI**: Streamlit ベースのWebアプリ
 - **基盤**: 既存の `batch_process.py`、`database_schema.py`、`db_query.py` を活用

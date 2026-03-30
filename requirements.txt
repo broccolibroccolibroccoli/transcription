@@ -1,28 +1,10 @@
-# Streamlit アプリ・文字起こし（WhisperX）用
+# Streamlit アプリ・文字起こし（AssemblyAI API）用
 # Main file: app.py
 #
-# 【重要】Python 3.14 では不可: whisperx が ctranslate2==4.4.0 を要求するが、
-# Py3.14 用ホイールが無く依存解決が失敗する。
-# → Streamlit Cloud の「Advanced settings」で Python を 3.11 または 3.12 にすること（必須）
-# → リポジトリの runtime.txt も併用（環境によっては参照される）
-#
-# PyAV(av): av 11 のソースビルドは環境の FFmpeg ヘッダと衝突しやすい。
-# → リポジトリ直下の pyproject.toml の [tool.uv] override-dependencies で
-#    faster-whisper==1.0.3 と av==12.3.0（ホイール）に上書きする（uv が読む）。
-#
-# torch / torchaudio は whisperx が依存関係として解決するため、ここでは明示しない
+# Streamlit Cloud の「Advanced settings」で Python 3.11 または 3.12 を推奨（runtime.txt 参照）
+
 streamlit>=1.36.0
 python-dotenv>=1.0.0
-openai>=1.0.0
 yt-dlp>=2024.1.0
-
-# PyPI の安定版に固定（解決の再現性を上げる）
-# faster-whisper 1.1+ は TranscriptionOptions に hotwords 必須。明示しないと 1.1+ が入り WhisperX 3.2 と不整合になり得る
-faster-whisper==1.0.3
-# NumPy 2.x は pyannote.audio（whisperx 依存）の np.NaN 参照と非互換（numpy<2 を pyproject と揃える）
-numpy>=1.26,<2
-# pyannote / whisperx 系が import 時に参照（PyPI のメタデータでは必須になっていないことがある）
-matplotlib>=3.7
-# torch 2.6.0 と揃える（日本語アライメント用 wav2vec2 の .bin 読み込みに torch 2.6+ が必要な場合がある）
-torchvision==0.21.0
-whisperx==3.2.0
+assemblyai>=0.28.0
+mutagen>=1.47.0

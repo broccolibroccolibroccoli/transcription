@@ -16,6 +16,18 @@ BASE_DIR = os.environ.get("TRANSCRIPTION_BASE_DIR", os.path.dirname(os.path.absp
 DB_PATH = os.path.join(BASE_DIR, "transcription.db")
 UPLOADS_DIR = os.path.join(BASE_DIR, "uploads")
 
+
+def get_assemblyai_api_key() -> str:
+    """Streamlit Secrets または環境変数から AssemblyAI API キーを取得する。"""
+    env_key = os.environ.get("ASSEMBLYAI_API_KEY", "").strip()
+    if env_key:
+        return env_key
+    try:
+        return str(st.secrets.get("ASSEMBLYAI_API_KEY", "") or "").strip()
+    except Exception:
+        return ""
+
+
 # True にするとサイドバーに YouTube URL 入力タブを表示
 SHOW_YOUTUBE_UPLOAD = True
 
@@ -956,66 +968,67 @@ def delete_file(file_id):
 
 
 def get_audio_duration_seconds(audio_path: str) -> float:
-    """音声ファイルの長さ（秒）を取得"""
+    """音声ファイルの長さ（秒）を取得（mutagen / wave）。"""
     try:
-        import torchaudio_compat  # noqa: F401
-        import whisperx
-        audio = whisperx.load_audio(audio_path)
-        return len(audio) / 16000.0
-    except ImportError:
-        # whisperx未インストール時は wave で代用
-        try:
-            import wave
-            with wave.open(audio_path, "rb") as w:
-                return w.getnframes() / w.getframerate()
-        except Exception:
-            return 0.0
+        from mutagen import File as MutagenFile
+
+        m = MutagenFile(audio_path)
+        if m is not None and getattr(m.info, "length", None) is not None:
+            return float(m.info.length)
+    except Exception:
+        pass
+    try:
+        import wave
+
+        with wave.open(audio_path, "rb") as w:
+            return w.getnframes() / w.getframerate()
     except Exception:
         return 0.0
 
 
 def estimate_completion_time(duration_seconds: float) -> datetime:
     """
-    音声長から処理完了予定時刻を推定
-    WhisperX(CPU)はおおよそ実時間の2〜4倍かかる想定
+    音声長から処理完了予定時刻を推定（AssemblyAI クラウド API 想定）。
     """
     if duration_seconds <= 0:
-        return datetime.now() + timedelta(minutes=5)
-    # 実時間の3倍を目安（CPU想定）
-    estimated_minutes = (duration_seconds / 60) * 3
-    return datetime.now() + timedelta(minutes=min(estimated_minutes, 120))
+        return datetime.now() + timedelta(minutes=2)
+    estimated_minutes = max(1.0, (duration_seconds / 60.0) * 0.35)
+    return datetime.now() + timedelta(minutes=min(estimated_minutes, 45.0))
 
 
 def process_uploaded_file(uploaded_file, project_id: int = 1):
-    """アップロードされたファイルを保存して処理"""
-    # ファイルを保存
+    """アップロードされたファイルを保存して処理（AssemblyAI）。"""
     save_path = os.path.join(UPLOADS_DIR, uploaded_file.name)
     with open(save_path, "wb") as f:
         f.write(uploaded_file.getvalue())
-    
+
+    key = get_assemblyai_api_key()
+    if not key:
+        return {
+            "success": False,
+            "error": (
+                "AssemblyAI の API キーが設定されていません。\n\n"
+                "Streamlit Cloud: アプリの [Secrets] に ASSEMBLYAI_API_KEY を設定してください。\n"
+                "ローカル: 環境変数 ASSEMBLYAI_API_KEY または .env に設定してください。"
+            ),
+        }
+
     try:
         from batch_process import process_audio_file, DB_PATH
     except ImportError as e:
         return {
             "success": False,
             "error": (
-                "whisperx の読み込みに失敗しました（文字起こしには whisperx が必要です）。\n\n"
-                f"【詳細】{e!s}\n\n"
-                "ローカル: pip install -r requirements.txt\n"
-                "Streamlit Cloud: ビルドログで pip が成功しているか確認し、"
-                "requirements.txt に torch / torchaudio / whisperx が含まれているか再デプロイしてください。"
+                f"batch_process の読み込みに失敗しました: {e!s}\n\n"
+                "ローカル: pip install -r requirements.txt（assemblyai を含む）\n"
+                "Streamlit Cloud: ビルドログを確認し再デプロイしてください。"
             ),
-        }
-    except Exception as e:
-        return {
-            "success": False,
-            "error": f"バッチ処理モジュールの読み込みに失敗しました: {e!s}",
         }
     from database_schema import create_database_schema
 
     create_database_schema(DB_PATH)
     try:
-        return process_audio_file(save_path, DB_PATH, project_id=project_id)
+        return process_audio_file(save_path, DB_PATH, project_id=project_id, api_key=key)
     except Exception as e:
         return {
             "success": False,
@@ -1024,8 +1037,19 @@ def process_uploaded_file(uploaded_file, project_id: int = 1):
 
 
 def process_youtube_url(url: str, project_id: int = 1):
-    """YouTube URLから音声をダウンロードして処理"""
+    """YouTube URLから音声をダウンロードして処理（AssemblyAI）。"""
     from youtube_utils import is_youtube_url, download_youtube_audio
+
+    key = get_assemblyai_api_key()
+    if not key:
+        return {
+            "success": False,
+            "error": (
+                "AssemblyAI の API キーが設定されていません。\n\n"
+                "Streamlit Cloud: [Secrets] に ASSEMBLYAI_API_KEY を設定してください。\n"
+                "ローカル: 環境変数 ASSEMBLYAI_API_KEY を設定してください。"
+            ),
+        }
 
     if not is_youtube_url(url):
         return {"success": False, "error": "有効なYouTubeのURLを入力してください。"}
@@ -1046,16 +1070,14 @@ def process_youtube_url(url: str, project_id: int = 1):
         return {
             "success": False,
             "error": (
-                "whisperx の読み込みに失敗しました。\n\n"
-                f"【詳細】{e!s}\n\n"
-                "ローカル: pip install -r requirements.txt\n"
-                "Streamlit Cloud: ビルドログを確認し requirements.txt を再デプロイしてください。"
+                f"batch_process の読み込みに失敗しました: {e!s}\n\n"
+                "pip install -r requirements.txt を確認してください。"
             ),
         }
     from database_schema import create_database_schema
 
     create_database_schema(DB_PATH)
-    return process_audio_file(audio_path, DB_PATH, project_id=project_id)
+    return process_audio_file(audio_path, DB_PATH, project_id=project_id, api_key=key)
 
 
 # ドラッグオーバー用オーバーレイ
@@ -1174,10 +1196,8 @@ with st.sidebar:
                         )
                 except Exception as e:
                     st.error(
-                        "処理が中断されました。Streamlit Community Cloud では **メモリ不足（OOM）** で"
-                        "プロセスが落ちると「Oh no」とだけ出ることがあります。"
-                        " Secrets に **TRANSCRIPTION_SKIP_DIARIZATION = \"true\"** や "
-                        "**WHISPERX_ASR_MODEL = \"base\"** を試してください。"
+                        "処理が中断されました。AssemblyAI の応答待ち中にエラーが発生した可能性があります。"
+                        " API キーや残クレジット、音声ファイル形式を確認してください。"
                     )
                     st.exception(e)
                     result = {"success": False}
@@ -1371,13 +1391,15 @@ if st.session_state.selected_file_id is not None:
                 else:
                     # 表示モード（マウスオーバーでハイライト）
                     for seg_idx, speaker, text, start, end in segments:
-                        speaker_str = speaker or "UNKNOWN"
+                        speaker_str = speaker or "Speaker A"
                         time_range = f"{format_time_mm_ss(start)}-{format_time_mm_ss(end)}"
                         text_escaped = html.escape(text).replace("\n", "<br>")
                         seg_html = (
                             f'<div class="transcript-segment">'
-                            f'<span style="color: #64748B; font-size: 0.9rem;">[{speaker_str}] ({time_range})</span> '
-                            f'{text_escaped}</div>'
+                            f'<span style="color: #334155; font-size: 0.95rem; font-weight: 600;">'
+                            f'{html.escape(speaker_str)}</span>'
+                            f'<span style="color: #64748B; font-size: 0.85rem;">（{time_range}）</span>'
+                            f'：{text_escaped}</div>'
                         )
                         st.markdown(seg_html, unsafe_allow_html=True)
             else:
