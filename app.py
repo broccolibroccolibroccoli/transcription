@@ -203,7 +203,7 @@ hr {
     display: none !important;
 }
 
-/* ②③Drag and drop → ファイルをドラッグ&ドロップ + または（幅内で折り返し・切れ防止） */
+/* ②③Drag and drop → 日本語案内（サイドバーは縦積み・1行目を nowrap） */
 [data-testid="stFileUploaderDropzoneInstructions"],
 [data-testid="stFileUploader"] [class*="Instructions"] {
     font-size: 0 !important;
@@ -212,21 +212,84 @@ hr {
     min-width: 0 !important;
 }
 
+/* サイドバー: Streamlit 既定は横並び flex のため、ドロップゾーン内を縦方向・中央揃えに上書き */
+[data-testid="stSidebar"] [data-testid="stFileUploaderDropzone"] {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 0.5rem !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+    min-width: 0 !important;
+}
+[data-testid="stSidebar"] [data-testid="stFileUploaderDropzone"] > * {
+    align-self: stretch !important;
+    max-width: 100% !important;
+}
+[data-testid="stSidebar"] [data-testid="stFileUploaderDropzoneInstructions"],
+[data-testid="stSidebar"] [data-testid="stFileUploader"] [class*="Instructions"] {
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    text-align: center !important;
+    flex: 0 1 auto !important;
+    width: 100% !important;
+}
+/* Limit 200MB per file 等のサブテキスト（英語）をメインの下に小さく表示 */
+[data-testid="stSidebar"] [data-testid="stFileUploaderDropzoneInstructions"] span,
+[data-testid="stSidebar"] [data-testid="stFileUploaderDropzoneInstructions"] p {
+    white-space: normal !important;
+    text-overflow: unset !important;
+    overflow: visible !important;
+    font-size: 0.68rem !important;
+    line-height: 1.35 !important;
+    color: var(--academy-text-muted) !important;
+    text-align: center !important;
+    display: block !important;
+    width: 100% !important;
+    margin-top: 0.2rem !important;
+}
+
 [data-testid="stFileUploaderDropzoneInstructions"]::before,
 [data-testid="stFileUploader"] [class*="Instructions"]::before {
-    content: "ファイルをドラッグ&ドロップ\\A\\Aまたは" !important;
-    white-space: pre-line !important;
-    word-break: break-word !important;
-    overflow-wrap: anywhere !important;
-    font-size: 0.95rem !important;
+    content: "ファイルをドラッグ&ドロップ\\Aまたは" !important;
+    white-space: pre !important;
+    font-size: 0.88rem !important;
     display: block !important;
     text-align: center !important;
     width: 100% !important;
     max-width: 100% !important;
     box-sizing: border-box !important;
-    padding: 0 0.35rem !important;
+    padding: 0 0.25rem !important;
     overflow: visible !important;
-    line-height: 1.5 !important;
+    line-height: 1.45 !important;
+}
+/* サイドバー: 1行目「ファイルをドラッグ&ドロップ」を1行で（狭いときはやや小さく） */
+[data-testid="stSidebar"] [data-testid="stFileUploaderDropzoneInstructions"]::before,
+[data-testid="stSidebar"] [data-testid="stFileUploader"] [class*="Instructions"]::before {
+    content: "ファイルをドラッグ&ドロップ" !important;
+    white-space: nowrap !important;
+    font-size: clamp(0.72rem, 2.8vw, 0.9rem) !important;
+}
+
+[data-testid="stSidebar"] [data-testid="stFileUploaderDropzoneInstructions"]::after,
+[data-testid="stSidebar"] [data-testid="stFileUploader"] [class*="Instructions"]::after {
+    content: "または" !important;
+    display: block !important;
+    font-size: 0.82rem !important;
+    text-align: center !important;
+    width: 100% !important;
+    margin-top: 0.35rem !important;
+    white-space: nowrap !important;
+}
+
+/* メインエリアのみ: 従来の改行入り案内（サイドバー上書きの後に非サイドバー向け） */
+.main [data-testid="stFileUploaderDropzoneInstructions"]::before,
+.main [data-testid="stFileUploader"] [class*="Instructions"]::before {
+    content: "ファイルをドラッグ&ドロップ\\Aまたは" !important;
+    white-space: pre !important;
+    font-size: 0.95rem !important;
 }
 
 /* 波線枠をwidth100%に、内部は中央揃え */
@@ -247,6 +310,14 @@ hr {
     box-sizing: border-box !important;
     overflow: visible !important;
     min-width: 0 !important;
+}
+
+/* サイドバーは上記より後で再指定（Streamlit 既定の横並び section を確実に縦積みに） */
+[data-testid="stSidebar"] [data-testid="stFileUploader"] [data-testid="stFileUploaderDropzone"] {
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 0.5rem !important;
 }
 
 /* ファイルを選択ボタン（Browse）のみ。Remove（×）ボタンは除外 */
@@ -339,11 +410,15 @@ hr {
     flex-wrap: wrap !important;
     min-width: 0 !important;
 }
-[data-testid="stSidebar"] .stButton > button[kind="primary"] {
-    white-space: normal !important;
-    word-break: break-word !important;
+[data-testid="stSidebar"] .stButton > button[kind="primary"],
+[data-testid="stSidebar"] [data-testid="stBaseButton-primary"] {
+    white-space: nowrap !important;
+    word-break: normal !important;
+    width: 100% !important;
     max-width: 100% !important;
-    margin: 0 auto !important;
+    box-sizing: border-box !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
 }
 [data-testid="stSidebar"] [data-testid="stAlert"] p {
     white-space: normal !important;
@@ -1015,13 +1090,11 @@ with st.sidebar:
                 help="mp4, wav, mp3, m4a, flac 形式に対応",
                 key="sidebar_file_uploader",
             )
-            _, col_btn, _ = st.columns([1, 2, 1])
-            with col_btn:
-                submitted = st.form_submit_button(
-                    "🚀 文字起こしを開始",
-                    type="primary",
-                    use_container_width=True,
-                )
+            submitted = st.form_submit_button(
+                "🚀 文字起こしを開始",
+                type="primary",
+                use_container_width=True,
+            )
         components.html(DRAG_OVERLAY_HTML, height=0)
         st.markdown(
             '<p style="text-align: center; color: #64748B; font-size: 0.8rem; margin: 0.2rem 0;">'
@@ -1078,19 +1151,22 @@ with st.sidebar:
                 unsafe_allow_html=True
             )
             if youtube_url and youtube_url.strip():
-                _, col_btn, _ = st.columns([1, 2, 1])
-                with col_btn:
-                    if st.button("🚀 文字起こしを開始", type="primary", key="sidebar_youtube_start"):
-                        with st.spinner("YouTubeから音声をダウンロードし、文字起こし処理中..."):
-                            result = process_youtube_url(
-                                youtube_url.strip(),
-                                project_id=st.session_state.selected_project_id,
-                            )
-                        if result.get("success"):
-                            st.success(f"✅ {result.get('filename')} の処理が完了しました")
-                            st.rerun()
-                        else:
-                            st.error(f"❌ エラー: {result.get('error', 'Unknown error')}")
+                if st.button(
+                    "🚀 文字起こしを開始",
+                    type="primary",
+                    key="sidebar_youtube_start",
+                    use_container_width=True,
+                ):
+                    with st.spinner("YouTubeから音声をダウンロードし、文字起こし処理中..."):
+                        result = process_youtube_url(
+                            youtube_url.strip(),
+                            project_id=st.session_state.selected_project_id,
+                        )
+                    if result.get("success"):
+                        st.success(f"✅ {result.get('filename')} の処理が完了しました")
+                        st.rerun()
+                    else:
+                        st.error(f"❌ エラー: {result.get('error', 'Unknown error')}")
     else:
         _render_file_uploader_sidebar()
 
