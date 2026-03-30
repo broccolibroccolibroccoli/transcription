@@ -9,11 +9,30 @@ from typing import Any, Dict, List, Tuple
 Row = Tuple[Any, Any, str, Any, Any]
 
 
+def is_incomplete(text: str) -> bool:
+    """直前セグメントが話者境界で途中までしか含まれていない疑いがあるか判定する。"""
+    if not text:
+        return False
+    incomplete_endings = [
+        "ていき",
+        "でいき",
+        "していき",
+        "ていて",
+        "てい",
+        "掘り下げ",
+        "解剖し",
+    ]
+    return any(text.endswith(e) for e in incomplete_endings)
+
+
 def fix_speaker_boundary(segments: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """
     話者切り替わりで次セグメント先頭に付いた語尾・助詞を前セグメントに戻す。
 
     segments は少なくともキー 'text' を持つ dict のリスト。
+
+    語尾の付け替えは、直前セグメントの末尾が is_incomplete に該当するときだけ行う
+    （パターン拡大に伴う誤補正を抑える）。
     """
     # 長いパターンを先に試す（「ですね」が単独の「で」に誤マッチしないようにする）
     boundary_patterns = [
@@ -27,13 +46,15 @@ def fix_speaker_boundary(segments: List[Dict[str, Any]]) -> List[Dict[str, Any]]
             result.append(seg)
             continue
         text = seg.get("text") or ""
-        for pattern in boundary_patterns:
-            m = re.match(pattern, text)
-            if m and len(text) > len(m.group()):
-                result[-1]["text"] = (result[-1].get("text") or "") + m.group()
-                seg = dict(seg)
-                seg["text"] = text[len(m.group()) :]
-                break
+        prev_text = result[-1].get("text") or ""
+        if is_incomplete(prev_text):
+            for pattern in boundary_patterns:
+                m = re.match(pattern, text)
+                if m and len(text) > len(m.group()):
+                    result[-1]["text"] = prev_text + m.group()
+                    seg = dict(seg)
+                    seg["text"] = text[len(m.group()) :]
+                    break
         result.append(seg)
     return result
 
