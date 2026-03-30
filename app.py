@@ -10,6 +10,7 @@ import html
 import csv
 import io
 from datetime import datetime, timedelta
+from typing import Optional
 
 # 設定（デプロイ時はリポジトリ直下。環境変数 TRANSCRIPTION_BASE_DIR で上書き可）
 BASE_DIR = os.environ.get("TRANSCRIPTION_BASE_DIR", os.path.dirname(os.path.abspath(__file__)))
@@ -996,7 +997,11 @@ def estimate_completion_time(duration_seconds: float) -> datetime:
     return datetime.now() + timedelta(minutes=min(estimated_minutes, 45.0))
 
 
-def process_uploaded_file(uploaded_file, project_id: int = 1):
+def process_uploaded_file(
+    uploaded_file,
+    project_id: int = 1,
+    speakers_expected: Optional[int] = None,
+):
     """アップロードされたファイルを保存して処理（AssemblyAI）。"""
     save_path = os.path.join(UPLOADS_DIR, uploaded_file.name)
     with open(save_path, "wb") as f:
@@ -1028,7 +1033,13 @@ def process_uploaded_file(uploaded_file, project_id: int = 1):
 
     create_database_schema(DB_PATH)
     try:
-        return process_audio_file(save_path, DB_PATH, project_id=project_id, api_key=key)
+        return process_audio_file(
+            save_path,
+            DB_PATH,
+            project_id=project_id,
+            api_key=key,
+            speakers_expected=speakers_expected,
+        )
     except Exception as e:
         return {
             "success": False,
@@ -1036,7 +1047,11 @@ def process_uploaded_file(uploaded_file, project_id: int = 1):
         }
 
 
-def process_youtube_url(url: str, project_id: int = 1):
+def process_youtube_url(
+    url: str,
+    project_id: int = 1,
+    speakers_expected: Optional[int] = None,
+):
     """YouTube URLから音声をダウンロードして処理（AssemblyAI）。"""
     from youtube_utils import is_youtube_url, download_youtube_audio
 
@@ -1077,7 +1092,13 @@ def process_youtube_url(url: str, project_id: int = 1):
     from database_schema import create_database_schema
 
     create_database_schema(DB_PATH)
-    return process_audio_file(audio_path, DB_PATH, project_id=project_id, api_key=key)
+    return process_audio_file(
+        audio_path,
+        DB_PATH,
+        project_id=project_id,
+        api_key=key,
+        speakers_expected=speakers_expected,
+    )
 
 
 # ドラッグオーバー用オーバーレイ
@@ -1172,6 +1193,22 @@ with st.sidebar:
                 help="mp4, wav, mp3, m4a, flac 形式に対応",
                 key="sidebar_file_uploader",
             )
+            use_auto_speakers = st.checkbox(
+                "話者数を自動判定する",
+                value=False,
+                key="sidebar_speakers_auto",
+            )
+            speakers_expected_val: Optional[int] = None
+            if not use_auto_speakers:
+                speakers_expected_val = st.number_input(
+                    "話者数（人）",
+                    min_value=1,
+                    max_value=10,
+                    value=2,
+                    step=1,
+                    help="録音に含まれる話者の人数を指定すると精度が上がります",
+                    key="sidebar_speakers_count",
+                )
             submitted = st.form_submit_button(
                 "🚀 文字起こしを開始",
                 type="primary",
@@ -1192,7 +1229,11 @@ with st.sidebar:
                 try:
                     with st.spinner(spinner_msg):
                         result = process_uploaded_file(
-                            uploaded, project_id=st.session_state.selected_project_id
+                            uploaded,
+                            project_id=st.session_state.selected_project_id,
+                            speakers_expected=None
+                            if use_auto_speakers
+                            else speakers_expected_val,
                         )
                 except Exception as e:
                     st.error(
@@ -1223,6 +1264,22 @@ with st.sidebar:
                 '公開されているYouTube動画のURLを入力</p>',
                 unsafe_allow_html=True
             )
+            use_auto_yt = st.checkbox(
+                "話者数を自動判定する",
+                value=False,
+                key="sidebar_youtube_speakers_auto",
+            )
+            speakers_yt: Optional[int] = None
+            if not use_auto_yt:
+                speakers_yt = st.number_input(
+                    "話者数（人）",
+                    min_value=1,
+                    max_value=10,
+                    value=2,
+                    step=1,
+                    help="録音に含まれる話者の人数を指定すると精度が上がります",
+                    key="sidebar_youtube_speakers_count",
+                )
             if youtube_url and youtube_url.strip():
                 if st.button(
                     "🚀 文字起こしを開始",
@@ -1234,6 +1291,7 @@ with st.sidebar:
                         result = process_youtube_url(
                             youtube_url.strip(),
                             project_id=st.session_state.selected_project_id,
+                            speakers_expected=None if use_auto_yt else speakers_yt,
                         )
                     if result.get("success"):
                         st.success(f"✅ {result.get('filename')} の処理が完了しました")

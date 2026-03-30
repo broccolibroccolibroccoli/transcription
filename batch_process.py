@@ -91,6 +91,7 @@ def process_audio_file(
     db_path: str,
     project_id: int = 1,
     api_key: Optional[str] = None,
+    speakers_expected: Optional[int] = None,
 ) -> Dict[str, Any]:
     """
     単一の音声ファイルを AssemblyAI で処理してデータベースに保存します。
@@ -100,6 +101,7 @@ def process_audio_file(
         db_path: データベースファイルのパス
         project_id: プロジェクトID
         api_key: AssemblyAI API キー（未指定時は環境変数 ASSEMBLYAI_API_KEY）
+        speakers_expected: 想定話者数（1〜10）。None のときは API に渡さず自動判定
     """
     import assemblyai as aai
 
@@ -127,13 +129,23 @@ def process_audio_file(
     # TranscriptionConfig.speech_models は List[str]。モデルは universal（既定）または nano
     speech_models: List[str] = [sm.value]
     print(f"speech_models: {speech_models}")
-    config = aai.TranscriptionConfig(
+    if speakers_expected is not None:
+        print(f"speakers_expected: {speakers_expected}")
+    else:
+        print("speakers_expected: (未指定・自動判定)")
+
+    _cfg: Dict[str, Any] = dict(
         speaker_labels=True,
         language_code="ja",
         speech_models=speech_models,
         punctuate=True,
         format_text=True,
     )
+    if speakers_expected is not None:
+        se = int(speakers_expected)
+        if 1 <= se <= 10:
+            _cfg["speakers_expected"] = se
+    config = aai.TranscriptionConfig(**_cfg)
 
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
