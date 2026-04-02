@@ -65,7 +65,8 @@ MIN_COMPLETION_TOKENS = 256
 
 # プロンプト内の instruction（.md）の上限（長いと最終統合で必ず 413 になる）
 MAX_INSTRUCTION_CHARS_SINGLE_SHOT = 4000
-MAX_INSTRUCTION_CHARS_FINAL_MERGE = 2800
+# summary_instruction.md 全文が入るよう余裕を持たせる（末尾の【出力ルール】欠落防止）
+MAX_INSTRUCTION_CHARS_FINAL_MERGE = 3600
 
 
 def _truncate_instruction_text(text: str, max_chars: int) -> str:
@@ -277,12 +278,38 @@ def split_into_chunks(text: str, max_chars: int = CHUNK_MAX_CHARS) -> List[str]:
     return chunks
 
 
+def _instruction_theme_block_for_chunks(rules: dict) -> str:
+    """instruction 内の【抽出テーマ】ブロックを取り出し、チャンク抽出で①〜③を漏らさないようにする。"""
+    body = (rules.get("instruction_body") or "").strip()
+    anchor = "【抽出テーマ】"
+    if anchor not in body:
+        return ""
+    i = body.index(anchor)
+    j = body.find("\n【", i + len(anchor))
+    if j == -1:
+        snippet = body[i:]
+    else:
+        snippet = body[i:j]
+    return snippet.strip()[:2000]
+
+
 def build_chunk_prompt(chunk: str, chunk_index: int, total_chunks: int, rules: dict) -> str:
     """
     チャンクごとの中間要約プロンプトを生成する。
     """
     keywords_str = "、".join(rules["keywords"]) if rules["keywords"] else "なし"
+    theme_block = _instruction_theme_block_for_chunks(rules)
+    theme_section = ""
+    if theme_block:
+        theme_section = f"""
+【抽出の観点（このパートにも該当があれば必ず拾う）】
+{theme_block}
+
+上記のテーマ①・②・③それぞれについて、このパートに該当する発言・示唆があれば箇条書きで書き出してください。
+特に③（AIにどのような期待があるのか）に触れている表現は、他テーマにまとめず必ず③として別に記載してください。
+"""
     return f"""以下は会議の文字起こしの一部（{chunk_index + 1}/{total_chunks}）です。
+{theme_section}
 この部分に含まれる重要な発言・決定事項・TODO を箇条書きで抽出してください。
 特に注目するキーワード: {keywords_str}
 
@@ -323,8 +350,14 @@ def build_final_prompt(chunk_summaries: List[str], rules: dict) -> str:
 - 各話者の発言を公平に反映し、特定の話者に偏らないこと"""
 
     if instruction:
+        merge_must = (
+            "\n\n【最終出力の必須事項】\n"
+            "- テーマ①・②・③はすべて必ず出力し、見出し（例: ## ①… / ## ②… / ## ③…）を欠かさないこと。\n"
+            "- 特に③「AIにどのような期待があるのか」は省略禁止。該当発言が少ない場合は、間接的な期待や示唆を③にまとめ、"
+            "本当に一切ない場合のみ「（該当する発言は確認できなかった）」と明記すること。\n"
+        )
         return f"""{instruction}
-
+{merge_must}
 ---
 
 {rule_block}
@@ -359,9 +392,15 @@ def _merge_intermediate_batch(
             [f"【断片{i + 1}】\n{s}" for i, s in enumerate(batch)]
         )
     lang = rules.get("output_lang", "ja")
+    theme_keep = ""
+    if _instruction_theme_block_for_chunks(rules):
+        theme_keep = (
+            "テーマ①・②・③のうち、どれかに属する要点は統合時に削除しないこと。"
+            "特に③（AIへの期待）に関する箇条書きは必ず残すこと。\n\n"
+        )
     prompt = f"""以下は会議の文字起こしを要約した断片です。重複を除き、時系列・論点が追えるように1つのまとまった要約に統合してください。
 出力言語: {lang}
-箇条書き可。長さは2000文字以内を目安に。
+{theme_keep}箇条書き可。長さは2000文字以内を目安に。
 
 {combined}
 """
