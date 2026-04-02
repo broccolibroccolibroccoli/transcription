@@ -53,21 +53,31 @@ GROQ_MODEL = "llama-3.1-8b-instant"
 
 # TPM制限対策
 # 1リクエストあたりの最大入力文字数（日本語1文字 ≒ 1.5トークン換算で余裕を持たせた値）
-CHUNK_MAX_CHARS = 2000
+CHUNK_MAX_CHARS = 1200
 
 # チャンク間のウェイト秒数（TPMリセットを待つ）
 CHUNK_WAIT_SECONDS = 62
 
-# 1リクエストあたりの入力トークン上限（無料枠 TPM 6000 の余裕を見て）
-# Groq 413: Requested 10205 > Limit 6000 回避用
-MAX_ESTIMATED_INPUT_TOKENS_PER_REQUEST = 5000
+# Groq 無料枠: 413 では「Requested 10117」等となり、入力に加え max_tokens 予約が合算される。
+# 文字数をトークンの上界として扱い、1リクエストの合計を抑える。
+GROQ_REQUEST_TOKEN_BUDGET = 5500
+MIN_COMPLETION_TOKENS = 256
+
+# プロンプト内の instruction（.md）の上限（長いと最終統合で必ず 413 になる）
+MAX_INSTRUCTION_CHARS_SINGLE_SHOT = 4000
+MAX_INSTRUCTION_CHARS_FINAL_MERGE = 2800
 
 
-def _prompt_estimated_tokens(text: str) -> int:
-    """日本語中心の文字列向けの粗いトークン推定（安全側に振る）。"""
-    if not text:
-        return 0
-    return max(1, int(len(text) * 0.55))
+def _truncate_instruction_text(text: str, max_chars: int) -> str:
+    t = (text or "").strip()
+    if len(t) <= max_chars:
+        return t
+    return t[:max_chars] + "\n\n[...省略（API の長さ制限のため）...]"
+
+
+def _prompt_fits_groq_budget(prompt: str, want_completion: int = MIN_COMPLETION_TOKENS) -> bool:
+    """入力文字数 + 完了トークン予約が Groq の 1 リクエスト制限に収まるか（保守的）。"""
+    return len(prompt) + want_completion <= GROQ_REQUEST_TOKEN_BUDGET
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -201,7 +211,9 @@ def build_prompt(transcript: str, rules: dict) -> str:
         else "プレーンテキスト"
     )
 
-    instruction = (rules.get("instruction_body") or "").strip()
+    instruction = _truncate_instruction_text(
+        rules.get("instruction_body") or "", MAX_INSTRUCTION_CHARS_SINGLE_SHOT
+    )
 
     if instruction:
         return f"""{instruction}
@@ -284,7 +296,9 @@ def build_final_prompt(chunk_summaries: List[str], rules: dict) -> str:
     各チャンクの中間要約を統合して最終要約を生成するプロンプトを生成する。
     instruction_file がある場合は先頭に付与する。
     """
-    instruction = (rules.get("instruction_body") or "").strip()
+    instruction = _truncate_instruction_text(
+        (rules.get("instruction_body") or "").strip(), MAX_INSTRUCTION_CHARS_FINAL_MERGE
+    )
     sections_str = (
         "・".join(rules["sections"])
         if rules["sections"]
@@ -329,10 +343,6 @@ def build_final_prompt(chunk_summaries: List[str], rules: dict) -> str:
 """
 
 
-def _final_prompt_estimated_tokens(chunk_summaries: List[str], rules: dict) -> int:
-    return _prompt_estimated_tokens(build_final_prompt(chunk_summaries, rules))
-
-
 def _merge_intermediate_batch(
     batch: List[str],
     rules: dict,
@@ -355,11 +365,11 @@ def _merge_intermediate_batch(
 
 {combined}
 """
-    if _prompt_estimated_tokens(prompt) > MAX_ESTIMATED_INPUT_TOKENS_PER_REQUEST:
+    if not _prompt_fits_groq_budget(prompt, want_completion=MIN_COMPLETION_TOKENS):
         if len(batch) == 1:
             s = batch[0]
             if len(s) <= 500:
-                return call_groq(client, prompt, max_tokens=2048)
+                return call_groq(client, prompt, max_tokens=1024)
             mid = max(1, len(s) // 2)
             left = _merge_intermediate_batch([s[:mid]], rules, client)
             time.sleep(CHUNK_WAIT_SECONDS)
@@ -372,7 +382,7 @@ def _merge_intermediate_batch(
         right = _merge_intermediate_batch(batch[mid:], rules, client)
         time.sleep(CHUNK_WAIT_SECONDS)
         return _merge_intermediate_batch([left, right], rules, client)
-    return call_groq(client, prompt, max_tokens=2048)
+    return call_groq(client, prompt, max_tokens=1024)
 
 
 def _reduce_summaries_for_final_merge(
@@ -387,13 +397,17 @@ def _reduce_summaries_for_final_merge(
     """
     guard = 0
     while (
-        _final_prompt_estimated_tokens(summaries, rules) > MAX_ESTIMATED_INPUT_TOKENS_PER_REQUEST
+        not _prompt_fits_groq_budget(
+            build_final_prompt(summaries, rules), want_completion=MIN_COMPLETION_TOKENS
+        )
         and guard < 200
     ):
         guard += 1
         if len(summaries) == 1:
             s = summaries[0]
-            if _final_prompt_estimated_tokens(summaries, rules) <= MAX_ESTIMATED_INPUT_TOKENS_PER_REQUEST:
+            if _prompt_fits_groq_budget(
+                build_final_prompt(summaries, rules), want_completion=MIN_COMPLETION_TOKENS
+            ):
                 break
             if len(s) <= 400:
                 raise RuntimeError(
@@ -427,11 +441,23 @@ def _reduce_summaries_for_final_merge(
 
 
 def call_groq(client: Groq, prompt: str, max_tokens: int = 1024) -> str:
-    """Groq API を1回呼び出してテキストを返す。"""
+    """
+    Groq API を1回呼び出す。
+    無料枠では「入力」と max_tokens 予約が合算され 413 になるため、
+    プロンプト長に応じて max_tokens を自動で抑える。
+    """
+    plen = len(prompt)
+    if plen + MIN_COMPLETION_TOKENS > GROQ_REQUEST_TOKEN_BUDGET:
+        raise RuntimeError(
+            f"プロンプトが長すぎます（{plen} 文字）。"
+            "summary_instruction.md を短くするか、文字起こしを分割してください。"
+        )
+    room = GROQ_REQUEST_TOKEN_BUDGET - plen
+    actual_max = min(max_tokens, room)
     chat_completion = client.chat.completions.create(
         model=GROQ_MODEL,
         messages=[{"role": "user", "content": prompt}],
-        max_tokens=max_tokens,
+        max_tokens=actual_max,
         temperature=0.3,
     )
     content = chat_completion.choices[0].message.content
@@ -473,12 +499,12 @@ def summarize_with_groq(
 
     if total == 1:
         prompt = build_prompt(transcript, rules)
-        if _prompt_estimated_tokens(prompt) > MAX_ESTIMATED_INPUT_TOKENS_PER_REQUEST:
+        if not _prompt_fits_groq_budget(prompt, want_completion=MIN_COMPLETION_TOKENS):
             raise RuntimeError(
-                "1回の要約リクエストが Groq の TPM 上限を超えています。"
+                "1回の要約リクエストが Groq の上限を超えています。"
                 "summary_instruction.md を短くするか、文字起こしを分割してください。"
             )
-        return call_groq(client, prompt, max_tokens=4096)
+        return call_groq(client, prompt, max_tokens=1024)
 
     chunk_summaries: List[str] = []
     for i, chunk in enumerate(chunks):
@@ -502,14 +528,14 @@ def summarize_with_groq(
         chunk_summaries, rules, client, verbose=verbose
     )
 
-    if _final_prompt_estimated_tokens(chunk_summaries, rules) > MAX_ESTIMATED_INPUT_TOKENS_PER_REQUEST:
+    fp = build_final_prompt(chunk_summaries, rules)
+    if not _prompt_fits_groq_budget(fp, want_completion=MIN_COMPLETION_TOKENS):
         raise RuntimeError(
-            "要約の最終統合時の入力が Groq の TPM 上限を超えています。"
+            "要約の最終統合時の入力が Groq の上限を超えています。"
             "summary_instruction.md を短くするか、summary_rules.csv の instruction_file を外してください。"
         )
 
-    final_prompt = build_final_prompt(chunk_summaries, rules)
-    return call_groq(client, final_prompt, max_tokens=4096)
+    return call_groq(client, fp, max_tokens=1024)
 
 
 # ------------------------------------------------------------------ #
