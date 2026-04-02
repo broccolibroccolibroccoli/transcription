@@ -63,6 +63,12 @@ CHUNK_WAIT_SECONDS = 62
 GROQ_REQUEST_TOKEN_BUDGET = 5500
 MIN_COMPLETION_TOKENS = 256
 
+# 出力長（①②③や CSV の max_chars に対応するため、最終・単発は多めに要求。
+# call_groq は room = BUDGET - len(prompt) で実際の max_tokens を自動縮小する）
+MAX_COMPLETION_TOKENS_FINAL = 4096
+MAX_COMPLETION_TOKENS_SINGLE_SHOT = 4096
+MAX_COMPLETION_TOKENS_CHUNK = 1024
+
 # プロンプト内の instruction（.md）の上限（長いと最終統合で必ず 413 になる）
 MAX_INSTRUCTION_CHARS_SINGLE_SHOT = 8000
 # summary_instruction.md 全文が入るよう余裕を持たせる（末尾の【出力ルール】欠落防止）
@@ -359,6 +365,7 @@ def build_final_prompt(chunk_summaries: List[str], rules: dict) -> str:
             "本当に一切ない場合のみ「（該当する発言は確認できなかった）」と明記すること。\n"
             "- 【顧客の自発的発言】【自社の誘導・同意】【自社からの提案】に**同一の箇条書きを重複して書かない**。"
             "各項目は定義に照らして**1カテゴリにだけ**配置。該当がないカテゴリは「（該当する発言は確認できなかった）」。\n"
+            "- 出力が長くなる場合でも**必ず ## ③ まで書き切る**こと。①②を簡潔にし、**③を最後まで省略しない**。\n"
         )
         return f"""{instruction}
 {merge_must}
@@ -505,8 +512,11 @@ def call_groq(client: Groq, prompt: str, max_tokens: int = 1024) -> str:
         max_tokens=actual_max,
         temperature=0.3,
     )
-    content = chat_completion.choices[0].message.content
-    return content if content is not None else ""
+    choice = chat_completion.choices[0]
+    content = choice.message.content
+    if content is None:
+        return ""
+    return content
 
 
 def summarize_with_groq(
@@ -549,14 +559,14 @@ def summarize_with_groq(
                 "1回の要約リクエストが Groq の上限を超えています。"
                 "summary_instruction.md を短くするか、文字起こしを分割してください。"
             )
-        return call_groq(client, prompt, max_tokens=1024)
+        return call_groq(client, prompt, max_tokens=MAX_COMPLETION_TOKENS_SINGLE_SHOT)
 
     chunk_summaries: List[str] = []
     for i, chunk in enumerate(chunks):
         if verbose:
             print(f"   チャンク {i + 1}/{total} を要約中...")
         prompt = build_chunk_prompt(chunk, i, total, rules)
-        summary = call_groq(client, prompt, max_tokens=1024)
+        summary = call_groq(client, prompt, max_tokens=MAX_COMPLETION_TOKENS_CHUNK)
         chunk_summaries.append(summary)
 
         if i < total - 1:
@@ -580,7 +590,7 @@ def summarize_with_groq(
             "summary_instruction.md を短くするか、summary_rules.csv の instruction_file を外してください。"
         )
 
-    return call_groq(client, fp, max_tokens=1024)
+    return call_groq(client, fp, max_tokens=MAX_COMPLETION_TOKENS_FINAL)
 
 
 # ------------------------------------------------------------------ #
