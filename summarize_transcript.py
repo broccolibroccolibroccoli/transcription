@@ -64,9 +64,9 @@ GROQ_REQUEST_TOKEN_BUDGET = 5500
 MIN_COMPLETION_TOKENS = 256
 
 # プロンプト内の instruction（.md）の上限（長いと最終統合で必ず 413 になる）
-MAX_INSTRUCTION_CHARS_SINGLE_SHOT = 4000
+MAX_INSTRUCTION_CHARS_SINGLE_SHOT = 8000
 # summary_instruction.md 全文が入るよう余裕を持たせる（末尾の【出力ルール】欠落防止）
-MAX_INSTRUCTION_CHARS_FINAL_MERGE = 3600
+MAX_INSTRUCTION_CHARS_FINAL_MERGE = 9000
 
 
 def _truncate_instruction_text(text: str, max_chars: int) -> str:
@@ -307,6 +307,8 @@ def build_chunk_prompt(chunk: str, chunk_index: int, total_chunks: int, rules: d
 
 上記のテーマ①・②・③それぞれについて、このパートに該当する発言・示唆があれば箇条書きで書き出してください。
 特に③（AIにどのような期待があるのか）に触れている表現は、他テーマにまとめず必ず③として別に記載してください。
+
+【分類】各箇条書きは【顧客の自発的発言】【自社の誘導・同意】【自社からの提案】のいずれか**1つだけ**に分類し、同じ文を3つにコピーしない。行頭に [顧客] / [誘導同意] / [自社提案] のタグを付ける。
 """
     return f"""以下は会議の文字起こしの一部（{chunk_index + 1}/{total_chunks}）です。
 {theme_section}
@@ -355,6 +357,8 @@ def build_final_prompt(chunk_summaries: List[str], rules: dict) -> str:
             "- テーマ①・②・③はすべて必ず出力し、見出し（例: ## ①… / ## ②… / ## ③…）を欠かさないこと。\n"
             "- 特に③「AIにどのような期待があるのか」は省略禁止。該当発言が少ない場合は、間接的な期待や示唆を③にまとめ、"
             "本当に一切ない場合のみ「（該当する発言は確認できなかった）」と明記すること。\n"
+            "- 【顧客の自発的発言】【自社の誘導・同意】【自社からの提案】に**同一の箇条書きを重複して書かない**。"
+            "各項目は定義に照らして**1カテゴリにだけ**配置。該当がないカテゴリは「（該当する発言は確認できなかった）」。\n"
         )
         return f"""{instruction}
 {merge_must}
@@ -396,7 +400,9 @@ def _merge_intermediate_batch(
     if _instruction_theme_block_for_chunks(rules):
         theme_keep = (
             "テーマ①・②・③のうち、どれかに属する要点は統合時に削除しないこと。"
-            "特に③（AIへの期待）に関する箇条書きは必ず残すこと。\n\n"
+            "特に③（AIへの期待）に関する箇条書きは必ず残すこと。"
+            "【顧客の自発的発言】【自社の誘導・同意】【自社からの提案】は定義どおりに分け、"
+            "同じ文を3カテゴリに複製しないこと。\n\n"
         )
     prompt = f"""以下は会議の文字起こしを要約した断片です。重複を除き、時系列・論点が追えるように1つのまとまった要約に統合してください。
 出力言語: {lang}
