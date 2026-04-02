@@ -58,6 +58,18 @@ CHUNK_MAX_CHARS = 2000
 # チャンク間のウェイト秒数（TPMリセットを待つ）
 CHUNK_WAIT_SECONDS = 62
 
+# 1リクエストあたりの入力トークン上限（無料枠 TPM 6000 の余裕を見て）
+# Groq 413: Requested 10205 > Limit 6000 回避用
+MAX_ESTIMATED_INPUT_TOKENS_PER_REQUEST = 5000
+
+
+def _prompt_estimated_tokens(text: str) -> int:
+    """日本語中心の文字列向けの粗いトークン推定（安全側に振る）。"""
+    if not text:
+        return 0
+    return max(1, int(len(text) * 0.55))
+
+
 BASE_DIR = Path(__file__).resolve().parent
 DEFAULT_RULES_PATH = str(BASE_DIR / "summary_rules.csv")
 
@@ -317,6 +329,98 @@ def build_final_prompt(chunk_summaries: List[str], rules: dict) -> str:
 """
 
 
+def _final_prompt_estimated_tokens(chunk_summaries: List[str], rules: dict) -> int:
+    return _prompt_estimated_tokens(build_final_prompt(chunk_summaries, rules))
+
+
+def _merge_intermediate_batch(
+    batch: List[str],
+    rules: dict,
+    client: Groq,
+) -> str:
+    """複数の中間要約を1つに圧縮（最終プロンプトの入力過多を防ぐ）。"""
+    if not batch:
+        return ""
+    if len(batch) == 1:
+        s = batch[0]
+        combined = f"【断片1】\n{s}"
+    else:
+        combined = "\n\n---\n\n".join(
+            [f"【断片{i + 1}】\n{s}" for i, s in enumerate(batch)]
+        )
+    lang = rules.get("output_lang", "ja")
+    prompt = f"""以下は会議の文字起こしを要約した断片です。重複を除き、時系列・論点が追えるように1つのまとまった要約に統合してください。
+出力言語: {lang}
+箇条書き可。長さは2000文字以内を目安に。
+
+{combined}
+"""
+    if _prompt_estimated_tokens(prompt) > MAX_ESTIMATED_INPUT_TOKENS_PER_REQUEST:
+        if len(batch) == 1:
+            s = batch[0]
+            if len(s) <= 500:
+                return call_groq(client, prompt, max_tokens=2048)
+            mid = max(1, len(s) // 2)
+            left = _merge_intermediate_batch([s[:mid]], rules, client)
+            time.sleep(CHUNK_WAIT_SECONDS)
+            right = _merge_intermediate_batch([s[mid:]], rules, client)
+            time.sleep(CHUNK_WAIT_SECONDS)
+            return _merge_intermediate_batch([left, right], rules, client)
+        mid = max(1, len(batch) // 2)
+        left = _merge_intermediate_batch(batch[:mid], rules, client)
+        time.sleep(CHUNK_WAIT_SECONDS)
+        right = _merge_intermediate_batch(batch[mid:], rules, client)
+        time.sleep(CHUNK_WAIT_SECONDS)
+        return _merge_intermediate_batch([left, right], rules, client)
+    return call_groq(client, prompt, max_tokens=2048)
+
+
+def _reduce_summaries_for_final_merge(
+    summaries: List[str],
+    rules: dict,
+    client: Groq,
+    *,
+    verbose: bool = False,
+) -> List[str]:
+    """
+    build_final_prompt が TPM 上限を超えないよう、中間要約を段階的に統合する。
+    """
+    guard = 0
+    while (
+        _final_prompt_estimated_tokens(summaries, rules) > MAX_ESTIMATED_INPUT_TOKENS_PER_REQUEST
+        and guard < 200
+    ):
+        guard += 1
+        if len(summaries) == 1:
+            s = summaries[0]
+            if _final_prompt_estimated_tokens(summaries, rules) <= MAX_ESTIMATED_INPUT_TOKENS_PER_REQUEST:
+                break
+            if len(s) <= 400:
+                raise RuntimeError(
+                    "要約の入力が Groq の TPM 上限を超えています。"
+                    "summary_instruction.md が長すぎる可能性があります。内容を短くするか、"
+                    "summary_rules.csv の instruction_file を外してください。"
+                )
+            mid = max(1, len(s) // 2)
+            summaries = [s[:mid], s[mid:]]
+            continue
+
+        next_level: List[str] = []
+        for i in range(0, len(summaries), 2):
+            pair = summaries[i : i + 2]
+            if len(pair) == 1:
+                next_level.append(pair[0])
+            else:
+                if verbose:
+                    print(f"   中間要約を統合中（{guard} 段目）…")
+                merged = _merge_intermediate_batch(pair, rules, client)
+                next_level.append(merged)
+                time.sleep(CHUNK_WAIT_SECONDS)
+        summaries = next_level
+
+    return summaries
+
+
 # ------------------------------------------------------------------ #
 # 5. Groq API で要約（チャンク分割・TPM制限対応）
 # ------------------------------------------------------------------ #
@@ -369,7 +473,12 @@ def summarize_with_groq(
 
     if total == 1:
         prompt = build_prompt(transcript, rules)
-        return call_groq(client, prompt, max_tokens=8192)
+        if _prompt_estimated_tokens(prompt) > MAX_ESTIMATED_INPUT_TOKENS_PER_REQUEST:
+            raise RuntimeError(
+                "1回の要約リクエストが Groq の TPM 上限を超えています。"
+                "summary_instruction.md を短くするか、文字起こしを分割してください。"
+            )
+        return call_groq(client, prompt, max_tokens=4096)
 
     chunk_summaries: List[str] = []
     for i, chunk in enumerate(chunks):
@@ -389,8 +498,18 @@ def summarize_with_groq(
         print(f"   TPM制限のため {CHUNK_WAIT_SECONDS} 秒待機中...")
     time.sleep(CHUNK_WAIT_SECONDS)
 
+    chunk_summaries = _reduce_summaries_for_final_merge(
+        chunk_summaries, rules, client, verbose=verbose
+    )
+
+    if _final_prompt_estimated_tokens(chunk_summaries, rules) > MAX_ESTIMATED_INPUT_TOKENS_PER_REQUEST:
+        raise RuntimeError(
+            "要約の最終統合時の入力が Groq の TPM 上限を超えています。"
+            "summary_instruction.md を短くするか、summary_rules.csv の instruction_file を外してください。"
+        )
+
     final_prompt = build_final_prompt(chunk_summaries, rules)
-    return call_groq(client, final_prompt, max_tokens=8192)
+    return call_groq(client, final_prompt, max_tokens=4096)
 
 
 # ------------------------------------------------------------------ #
