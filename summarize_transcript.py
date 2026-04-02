@@ -1,0 +1,486 @@
+"""
+summarize_transcript.py
+=======================
+文字起こし・話者分離の結果テキストを読み込み、
+summary_rules.csv に記載したルールに基づいて Groq API で要約します。
+
+Groq 無料枠の TPM 制限（6,000 tokens/分）に対応するため、
+テキストをチャンク分割して要約し、最後に統合します。
+
+  ステップ1: 文字起こしを複数チャンクに分割して各チャンクを要約
+  ステップ2: 各チャンクの要約をまとめて最終要約を生成
+  ステップ3: チャンク間に 60 秒超のウェイトを挿入して TPM 制限を回避
+
+短いテキスト（1チャンク以下）は従来どおり 1 回の API 呼び出しで要約します。
+
+前提:
+  - 既に生成した文字起こし・話者分離の結果が存在すること
+  - summary_rules.csv が同ディレクトリに存在すること（任意で instruction_file で .md を参照）
+  - 環境変数 GROQ_API_KEY が設定されていること
+    （Groq Console → https://console.groq.com/keys で取得、クレジットカード不要）
+
+インストール:
+  pip install groq
+
+使い方:
+  python summarize_transcript.py \\
+      --transcript transcription_with_speakers.txt \\
+      --rules summary_rules.csv \\
+      --output summary_output.md
+"""
+from __future__ import annotations
+
+import argparse
+import csv
+import os
+import re
+import time
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Sequence, Tuple
+
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv(Path(__file__).resolve().parent / ".env")
+except ImportError:
+    pass
+
+from groq import Groq
+
+# 使用モデル
+# 無料枠: 14,400 リクエスト/日、500,000 トークン/日、30 リクエスト/分
+GROQ_MODEL = "llama-3.1-8b-instant"
+
+# TPM制限対策
+# 1リクエストあたりの最大入力文字数（日本語1文字 ≒ 1.5トークン換算で余裕を持たせた値）
+CHUNK_MAX_CHARS = 2000
+
+# チャンク間のウェイト秒数（TPMリセットを待つ）
+CHUNK_WAIT_SECONDS = 62
+
+BASE_DIR = Path(__file__).resolve().parent
+DEFAULT_RULES_PATH = str(BASE_DIR / "summary_rules.csv")
+
+
+def resolve_groq_api_key(explicit: Optional[str] = None) -> str:
+    """環境変数、または明示指定から Groq API キーを返す。"""
+    if explicit and str(explicit).strip():
+        return str(explicit).strip()
+    return os.environ.get("GROQ_API_KEY", "").strip()
+
+
+# ------------------------------------------------------------------ #
+# 1. CSV からルールを読み込む
+# ------------------------------------------------------------------ #
+
+
+def load_rules(csv_path: str) -> dict:
+    """
+    summary_rules.csv を読み込み、辞書形式に変換して返す。
+
+    返り値の構造:
+    {
+        "output_format": "markdown",
+        "max_chars": 800,
+        "sections": ["概要", ...],
+        "speaker_labels": {"SPEAKER_00": "Aさん", ...},
+        "keywords": [],
+        "exclude_filler": True,
+        "output_lang": "ja",
+        "instruction_body": "...",  # instruction_file から読み込んだ場合
+    }
+    """
+    rules: Dict[str, Any] = {
+        "output_format": "plain",
+        "max_chars": 1000,
+        "sections": [],
+        "speaker_labels": {},
+        "keywords": [],
+        "exclude_filler": False,
+        "output_lang": "ja",
+        "instruction_body": "",
+        "_instruction_relpath": "",
+    }
+
+    csv_dir = os.path.dirname(os.path.abspath(csv_path))
+
+    with open(csv_path, encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            rtype = (row.get("rule_type") or "").strip()
+            param = (row.get("parameter") or "").strip()
+            value = (row.get("value") or "").strip()
+
+            if rtype == "output_format" and param == "format":
+                rules["output_format"] = value
+
+            elif rtype == "summary_length" and param == "max_chars":
+                rules["max_chars"] = int(value)
+
+            elif rtype == "section" and param == "name":
+                rules["sections"].append(value)
+
+            elif rtype == "speaker_label":
+                rules["speaker_labels"][param] = value
+
+            elif rtype == "keyword_highlight" and param == "keyword":
+                rules["keywords"].append(value)
+
+            elif rtype == "exclude_filler" and param == "enabled":
+                rules["exclude_filler"] = value.lower() == "true"
+
+            elif rtype == "language" and param == "output_lang":
+                rules["output_lang"] = value
+
+            elif rtype == "instruction_file" and param == "path":
+                rules["_instruction_relpath"] = value
+
+    if rules.get("_instruction_relpath"):
+        ipath = os.path.join(csv_dir, rules["_instruction_relpath"])
+        if os.path.isfile(ipath):
+            with open(ipath, encoding="utf-8") as inf:
+                rules["instruction_body"] = inf.read().strip()
+    del rules["_instruction_relpath"]
+
+    return rules
+
+
+# ------------------------------------------------------------------ #
+# 2. 文字起こしテキストの前処理
+# ------------------------------------------------------------------ #
+
+FILLER_PATTERN = re.compile(
+    r"(?<![a-zA-Z])(えー+|えーと|あのー?|まあ|うーん|そのー?|なんか|ちょっと待って|ですね+)(?![a-zA-Z])"
+)
+
+
+def preprocess_transcript(text: str, rules: dict) -> str:
+    """
+    話者ラベルの置換・フィラー除去などの前処理を行う。
+    """
+    for original, display in rules["speaker_labels"].items():
+        text = text.replace(f"[{original}]", f"[{display}]")
+
+    if rules["exclude_filler"]:
+        text = FILLER_PATTERN.sub("", text)
+        text = re.sub(r"[ \t]{2,}", " ", text)
+
+    return text.strip()
+
+
+# ------------------------------------------------------------------ #
+# 3. プロンプト生成
+# ------------------------------------------------------------------ #
+
+
+def build_prompt(transcript: str, rules: dict) -> str:
+    """
+    ルールを反映した要約指示プロンプトを構築する。
+    """
+    sections_str = (
+        "・".join(rules["sections"])
+        if rules["sections"]
+        else "概要・主な議題・決定事項・アクションアイテム"
+    )
+    keywords_str = "、".join(rules["keywords"]) if rules["keywords"] else "なし"
+    fmt = (
+        "Markdown（見出し・箇条書き）"
+        if rules["output_format"] == "markdown"
+        else "プレーンテキスト"
+    )
+
+    instruction = (rules.get("instruction_body") or "").strip()
+
+    if instruction:
+        return f"""{instruction}
+
+---
+
+## CSV で指定した追加条件
+- 出力フォーマット: {fmt}
+- 最大文字数: {rules['max_chars']}文字以内
+- 補助セクション（参考）: {sections_str}
+- 特に注目するキーワード: {keywords_str}（含まれる発言は可能な範囲で反映）
+- 出力言語: {rules['output_lang']}
+
+## 文字起こしデータ（ソース）
+{transcript}
+"""
+
+    prompt = f"""以下は会議の文字起こしデータです。ルールに従って要約してください。
+
+## 要約ルール
+- 出力フォーマット: {fmt}
+- 最大文字数: {rules['max_chars']}文字以内
+- 必須セクション: {sections_str}
+- 特に注目するキーワード: {keywords_str}（これらが含まれる発言は必ずどこかのセクションに反映する）
+- 出力言語: {rules['output_lang']}
+- 各話者の発言を公平に反映し、特定の話者に偏らないこと
+
+## 文字起こしデータ
+{transcript}
+"""
+    return prompt
+
+
+# ------------------------------------------------------------------ #
+# 4. テキストをチャンクに分割する
+# ------------------------------------------------------------------ #
+
+
+def split_into_chunks(text: str, max_chars: int = CHUNK_MAX_CHARS) -> List[str]:
+    """
+    テキストを発話行単位で max_chars 以下のチャンクに分割する。
+    話者の発言途中では切らず、行単位でまとめる。
+    """
+    lines = text.splitlines()
+    chunks: List[str] = []
+    current_chunk_lines: List[str] = []
+    current_len = 0
+
+    for line in lines:
+        line_len = len(line) + 1
+        if current_len + line_len > max_chars and current_chunk_lines:
+            chunks.append("\n".join(current_chunk_lines))
+            current_chunk_lines = []
+            current_len = 0
+        current_chunk_lines.append(line)
+        current_len += line_len
+
+    if current_chunk_lines:
+        chunks.append("\n".join(current_chunk_lines))
+
+    return chunks
+
+
+def build_chunk_prompt(chunk: str, chunk_index: int, total_chunks: int, rules: dict) -> str:
+    """
+    チャンクごとの中間要約プロンプトを生成する。
+    """
+    keywords_str = "、".join(rules["keywords"]) if rules["keywords"] else "なし"
+    return f"""以下は会議の文字起こしの一部（{chunk_index + 1}/{total_chunks}）です。
+この部分に含まれる重要な発言・決定事項・TODO を箇条書きで抽出してください。
+特に注目するキーワード: {keywords_str}
+
+## 文字起こし（{chunk_index + 1}/{total_chunks}）
+{chunk}
+"""
+
+
+def build_final_prompt(chunk_summaries: List[str], rules: dict) -> str:
+    """
+    各チャンクの中間要約を統合して最終要約を生成するプロンプトを生成する。
+    instruction_file がある場合は先頭に付与する。
+    """
+    instruction = (rules.get("instruction_body") or "").strip()
+    sections_str = (
+        "・".join(rules["sections"])
+        if rules["sections"]
+        else "概要・主な議題・決定事項・アクションアイテム"
+    )
+    keywords_str = "、".join(rules["keywords"]) if rules["keywords"] else "なし"
+    fmt = (
+        "Markdown（見出し・箇条書き）"
+        if rules["output_format"] == "markdown"
+        else "プレーンテキスト"
+    )
+    combined = "\n\n---\n\n".join(
+        [f"【パート{i + 1}の要点】\n{s}" for i, s in enumerate(chunk_summaries)]
+    )
+
+    rule_block = f"""## 要約ルール
+- 出力フォーマット: {fmt}
+- 最大文字数: {rules['max_chars']}文字以内
+- 必須セクション: {sections_str}
+- 特に注目するキーワード: {keywords_str}（含まれる場合は必ず反映すること）
+- 出力言語: {rules['output_lang']}
+- 各話者の発言を公平に反映し、特定の話者に偏らないこと"""
+
+    if instruction:
+        return f"""{instruction}
+
+---
+
+{rule_block}
+
+## 各パートの要点
+{combined}
+"""
+
+    return f"""以下は会議の文字起こしを複数パートに分けて抽出した要点です。
+これらを統合して、会議全体の最終要約を作成してください。
+
+{rule_block}
+
+## 各パートの要点
+{combined}
+"""
+
+
+# ------------------------------------------------------------------ #
+# 5. Groq API で要約（チャンク分割・TPM制限対応）
+# ------------------------------------------------------------------ #
+
+
+def call_groq(client: Groq, prompt: str, max_tokens: int = 1024) -> str:
+    """Groq API を1回呼び出してテキストを返す。"""
+    chat_completion = client.chat.completions.create(
+        model=GROQ_MODEL,
+        messages=[{"role": "user", "content": prompt}],
+        max_tokens=max_tokens,
+        temperature=0.3,
+    )
+    content = chat_completion.choices[0].message.content
+    return content if content is not None else ""
+
+
+def summarize_with_groq(
+    transcript: str,
+    rules: dict,
+    api_key: Optional[str] = None,
+    *,
+    verbose: bool = False,
+) -> str:
+    """
+    Groq API で要約を返す。
+
+    - 1チャンクに収まる場合: build_prompt で 1 回のみ呼び出し
+    - 複数チャンク: 各チャンクを抽出 → 統合（チャンク間は TPM 対策で待機）
+
+    transcript は preprocess 済みの文字列を想定する。
+    """
+    key = resolve_groq_api_key(api_key)
+    if not key:
+        raise EnvironmentError(
+            "環境変数 GROQ_API_KEY が設定されていません。\n"
+            "Groq Console ( https://console.groq.com/keys ) で\n"
+            "APIキーを取得し（クレジットカード不要）、.env または環境変数に設定してください:\n"
+            "  GROQ_API_KEY=your-key-here"
+        )
+
+    client = Groq(api_key=key)
+    chunks = split_into_chunks(transcript)
+    if not chunks:
+        return ""
+
+    total = len(chunks)
+    if verbose:
+        print(f"   テキストを {total} チャンクに分割しました（各最大 {CHUNK_MAX_CHARS} 文字）")
+
+    if total == 1:
+        prompt = build_prompt(transcript, rules)
+        return call_groq(client, prompt, max_tokens=8192)
+
+    chunk_summaries: List[str] = []
+    for i, chunk in enumerate(chunks):
+        if verbose:
+            print(f"   チャンク {i + 1}/{total} を要約中...")
+        prompt = build_chunk_prompt(chunk, i, total, rules)
+        summary = call_groq(client, prompt, max_tokens=1024)
+        chunk_summaries.append(summary)
+
+        if i < total - 1:
+            if verbose:
+                print(f"   TPM制限のため {CHUNK_WAIT_SECONDS} 秒待機中...")
+            time.sleep(CHUNK_WAIT_SECONDS)
+
+    if verbose:
+        print("   全チャンクの要約を統合中...")
+        print(f"   TPM制限のため {CHUNK_WAIT_SECONDS} 秒待機中...")
+    time.sleep(CHUNK_WAIT_SECONDS)
+
+    final_prompt = build_final_prompt(chunk_summaries, rules)
+    return call_groq(client, final_prompt, max_tokens=8192)
+
+
+# ------------------------------------------------------------------ #
+# セグメント行からテキスト化（アプリ連携用）
+# ------------------------------------------------------------------ #
+
+
+def segments_rows_to_transcript(
+    rows: Sequence[Tuple[Any, ...]],
+    apply_boundary_fix: bool = False,
+) -> str:
+    """
+    get_segments_by_file_id と同形式の行から [話者] 本文 形式の1テキストを作る。
+
+    rows: (segment_index, speaker, text, start_time, end_time)
+    """
+    if apply_boundary_fix:
+        from segment_postprocess import fix_speaker_boundary_rows
+
+        rows = fix_speaker_boundary_rows(list(rows))
+    lines: List[str] = []
+    for _seg_idx, speaker, text, _start, _end in rows:
+        sp = speaker or "UNKNOWN"
+        lines.append(f"[{sp}] {text}")
+    return "\n".join(lines)
+
+
+def summarize_transcript_text(
+    transcript_raw: str,
+    rules_path: str = DEFAULT_RULES_PATH,
+    api_key: Optional[str] = None,
+) -> str:
+    """
+    前処理・Groq 呼び出しまで一括実行。アプリから利用。
+    """
+    rules = load_rules(rules_path)
+    transcript = preprocess_transcript(transcript_raw, rules)
+    return summarize_with_groq(transcript, rules, api_key=api_key)
+
+
+# ------------------------------------------------------------------ #
+# 6. メイン処理
+# ------------------------------------------------------------------ #
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="文字起こし結果をルールに基づいて要約します（Groq Llama 3.1 8B / チャンク分割対応）"
+    )
+    parser.add_argument(
+        "--transcript",
+        default="transcription_with_speakers.txt",
+        help="文字起こしテキストファイルのパス",
+    )
+    parser.add_argument(
+        "--rules",
+        default="summary_rules.csv",
+        help="要約ルールCSVファイルのパス",
+    )
+    parser.add_argument(
+        "--output",
+        default="summary_output.md",
+        help="要約結果の出力ファイルパス",
+    )
+    args = parser.parse_args()
+
+    print(f"📋 ルールを読み込み中: {args.rules}")
+    rules = load_rules(args.rules)
+    print(f"   セクション: {rules['sections']}")
+    print(f"   話者ラベル: {rules['speaker_labels']}")
+    print(f"   フィラー除去: {rules['exclude_filler']}")
+    if rules.get("instruction_body"):
+        print(f"   指示ファイル: 読み込み済み（{len(rules['instruction_body'])} 文字）")
+
+    print(f"\n📄 文字起こしを読み込み中: {args.transcript}")
+    with open(args.transcript, encoding="utf-8") as f:
+        raw_transcript = f.read()
+
+    transcript = preprocess_transcript(raw_transcript, rules)
+    print(f"   文字数（前処理後）: {len(transcript)}")
+
+    print(f"\n🤖 Groq ({GROQ_MODEL}) で要約中...")
+    summary = summarize_with_groq(transcript, rules, verbose=True)
+
+    with open(args.output, "w", encoding="utf-8") as f:
+        f.write(summary)
+    print(f"\n✅ 要約が完了しました → {args.output}")
+    print("\n--- 要約プレビュー（先頭300文字）---")
+    print(summary[:300])
+
+
+if __name__ == "__main__":
+    main()

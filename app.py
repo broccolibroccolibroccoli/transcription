@@ -13,11 +13,26 @@ from datetime import datetime, timedelta
 from typing import Optional
 
 from segment_postprocess import fix_speaker_boundary_rows
+from summarize_transcript import (
+    GROQ_MODEL,
+    load_rules,
+    preprocess_transcript,
+    summarize_with_groq,
+    segments_rows_to_transcript,
+)
 
 # 設定（デプロイ時はリポジトリ直下。環境変数 TRANSCRIPTION_BASE_DIR で上書き可）
 BASE_DIR = os.environ.get("TRANSCRIPTION_BASE_DIR", os.path.dirname(os.path.abspath(__file__)))
 DB_PATH = os.path.join(BASE_DIR, "transcription.db")
 UPLOADS_DIR = os.path.join(BASE_DIR, "uploads")
+SUMMARY_RULES_PATH = os.path.join(BASE_DIR, "summary_rules.csv")
+
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv(os.path.join(BASE_DIR, ".env"))
+except ImportError:
+    pass
 
 
 def get_assemblyai_api_key() -> str:
@@ -27,6 +42,17 @@ def get_assemblyai_api_key() -> str:
         return env_key
     try:
         return str(st.secrets.get("ASSEMBLYAI_API_KEY", "") or "").strip()
+    except Exception:
+        return ""
+
+
+def get_groq_api_key() -> str:
+    """環境変数（.env）または Streamlit Secrets から Groq API キーを取得する。"""
+    env_key = os.environ.get("GROQ_API_KEY", "").strip()
+    if env_key:
+        return env_key
+    try:
+        return str(st.secrets.get("GROQ_API_KEY", "") or "").strip()
     except Exception:
         return ""
 
@@ -725,6 +751,44 @@ def get_segments_by_file_id(file_id):
     return rows
 
 
+def get_latest_summary(file_id: int):
+    """最新の要約1件を (content, model_used, created_at) で返す。なければ None。"""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        SELECT content, model_used, created_at FROM summaries
+        WHERE file_id = ?
+        ORDER BY created_at DESC LIMIT 1
+        """,
+        (file_id,),
+    )
+    row = cursor.fetchone()
+    conn.close()
+    return row
+
+
+def insert_summary(file_id: int, content: str, model_used: str) -> bool:
+    """要約を summaries に保存する。"""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            """
+            INSERT INTO summaries (file_id, summary_type, content, model_used)
+            VALUES (?, 'full', ?, ?)
+            """,
+            (file_id, content, model_used or GROQ_MODEL),
+        )
+        conn.commit()
+        return cursor.rowcount > 0
+    except Exception:
+        conn.rollback()
+        return False
+    finally:
+        conn.close()
+
+
 def segments_to_csv(segments: list) -> bytes:
     """セグメントリストをCSV形式のバイト列に変換（UTF-8 BOM付きでExcel対応）"""
     output = io.StringIO()
@@ -1410,6 +1474,52 @@ if st.session_state.selected_file_id is not None:
                     if st.button("🗑️", key=f"delete_detail_{file_id}", help="削除"):
                         st.session_state.pending_delete = (file_id, filename)
                         st.rerun()
+
+                with st.expander("📊 要約（Groq）", expanded=False):
+                    if not os.path.isfile(SUMMARY_RULES_PATH):
+                        st.warning("要約ルール `summary_rules.csv` が見つかりません。")
+                    elif is_editing:
+                        st.info("編集内容を保存してから要約を生成してください。")
+                    else:
+                        prev = get_latest_summary(file_id)
+                        if prev:
+                            content, model_used, created_at = prev
+                            st.caption(f"保存済み · モデル: {model_used or GROQ_MODEL} · {created_at}")
+                            st.markdown(content or "（空）")
+                            base_dl = os.path.splitext(filename)[0]
+                            st.download_button(
+                                "要約を .md でダウンロード",
+                                data=content or "",
+                                file_name=f"{base_dl}_要約.md",
+                                mime="text/markdown",
+                                key=f"summary_dl_{file_id}",
+                            )
+                        groq_key = get_groq_api_key()
+                        if not groq_key:
+                            st.error(
+                                "GROQ_API_KEY が未設定です。.env または Streamlit Secrets に設定してください。"
+                            )
+                        elif st.button(
+                            "要約を生成" if not prev else "要約を再生成",
+                            key=f"summarize_{file_id}",
+                            type="secondary",
+                        ):
+                            raw_text = segments_rows_to_transcript(
+                                segments, apply_boundary_fix=True
+                            )
+                            rules = load_rules(SUMMARY_RULES_PATH)
+                            transcript = preprocess_transcript(raw_text, rules)
+                            with st.spinner(
+                                "Groq で要約中…（長文はチャンク分割のため数分かかる場合があります）"
+                            ):
+                                summary_text = summarize_with_groq(
+                                    transcript, rules, api_key=groq_key
+                                )
+                            if insert_summary(file_id, summary_text, GROQ_MODEL):
+                                st.success("要約を保存しました。")
+                                st.rerun()
+                            else:
+                                st.error("要約の保存に失敗しました。")
 
                 if is_editing:
                     # 選択中（フォーカス中）のテキストエリアのみ枠をprimaryColorで強調
