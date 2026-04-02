@@ -10,6 +10,7 @@ Groq 無料枠の TPM 制限（6,000 tokens/分）に対応するため、
   ステップ1: 文字起こしを複数チャンクに分割して各チャンクを要約
   ステップ2: 各チャンクの要約をまとめて最終要約を生成
   ステップ3: チャンク間に 60 秒超のウェイトを挿入して TPM 制限を回避
+  ステップ4（複数チャンク時）: テーマ③を専用の追加リクエストで補完し、長文でも③が切れにくくする
 
 短いテキスト（1チャンク以下）は従来どおり 1 回の API 呼び出しで要約します。
 
@@ -68,6 +69,9 @@ MIN_COMPLETION_TOKENS = 256
 MAX_COMPLETION_TOKENS_FINAL = 4096
 MAX_COMPLETION_TOKENS_SINGLE_SHOT = 4096
 MAX_COMPLETION_TOKENS_CHUNK = 1024
+# 長時間音声で最終1回の出力が足りない場合、③だけ専用リクエストで補完する
+MAX_COMPLETION_TOKENS_SECTION_THREE = 3072
+SECTION_THREE_INPUT_MAX_CHARS = 4000
 
 # プロンプト内の instruction（.md）の上限（長いと最終統合で必ず 413 になる）
 MAX_INSTRUCTION_CHARS_SINGLE_SHOT = 8000
@@ -387,6 +391,66 @@ def build_final_prompt(chunk_summaries: List[str], rules: dict) -> str:
 """
 
 
+def _join_chunk_summaries_capped_for_section_three(
+    summaries: List[str],
+    max_total_chars: int = SECTION_THREE_INPUT_MAX_CHARS,
+) -> str:
+    """テーマ③専用プロンプト用にパート要点を連結。長いときは均等に省略して入力を抑える。"""
+    if not summaries:
+        return ""
+    sep_len = len("\n\n---\n\n") * (len(summaries) - 1)
+    overhead = 50 * len(summaries)
+    budget = max(800, max_total_chars - sep_len - overhead)
+    per = max(200, budget // len(summaries))
+    parts: List[str] = []
+    for i, s in enumerate(summaries):
+        block = s.strip()
+        if len(block) > per:
+            block = block[:per] + "…（このパートは省略）"
+        parts.append(f"【パート{i + 1}の要点】\n{block}")
+    return "\n\n---\n\n".join(parts)
+
+
+def build_section_three_followup_prompt(combined_capped: str, rules: dict) -> str:
+    """
+    テーマ③のみを詳述する軽量プロンプト（入力を抑え、出力枠を③に割り当てる）。
+    """
+    lang = rules.get("output_lang", "ja")
+    return f"""あなたは議事録の要約者です。
+以下は会議の各パートから抽出したメモです。ここから **テーマ③「AIにどのような期待があるのか」に該当する内容だけ** を統合し、
+**完結した Markdown 1セクション**として出力してください（**途中で切らない**）。
+
+## 出力形式（必須）
+- 先頭の見出しは `## ③` で始め、タイトルに「AI」「期待」が分かるようにしてください。
+- 次の3区分で箇条書き（メイン要約と同じ定義）:
+  - ### 【顧客の自発的発言】
+  - ### 【自社の誘導・同意】
+  - ### 【自社からの提案】
+- テーマ①②の内容は書かない。③のみ。
+- 該当がない区分は「（該当する発言は確認できなかった）」と明記。
+
+出力言語: {lang}
+
+## 各パートの要点
+{combined_capped}
+"""
+
+
+SECTION_THREE_BLOCK_RE = re.compile(r"(?ms)^##\s*③[^\n]*\n.*?(?=^##\s|\Z)")
+
+
+def merge_section_three_into_full_summary(full: str, section_three_md: str) -> str:
+    """全体要約の ③ ブロックを、専用リクエストの結果で置換（なければ末尾に追加）。"""
+    t = (section_three_md or "").strip()
+    if not t:
+        return full
+    if not re.match(r"^##\s*③", t):
+        t = "## ③AIにどのような期待があるのか\n\n" + t
+    if SECTION_THREE_BLOCK_RE.search(full):
+        return SECTION_THREE_BLOCK_RE.sub(t.rstrip() + "\n\n", full, count=1)
+    return full.rstrip() + "\n\n" + t + "\n"
+
+
 def _merge_intermediate_batch(
     batch: List[str],
     rules: dict,
@@ -590,7 +654,36 @@ def summarize_with_groq(
             "summary_instruction.md を短くするか、summary_rules.csv の instruction_file を外してください。"
         )
 
-    return call_groq(client, fp, max_tokens=MAX_COMPLETION_TOKENS_FINAL)
+    full_summary = call_groq(client, fp, max_tokens=MAX_COMPLETION_TOKENS_FINAL)
+
+    # 長文では最終1回の出力枠が足りず③が切れることがあるため、③だけ専用リクエストで補完して差し替え
+    s3_prompt: Optional[str] = None
+    for cap in (
+        SECTION_THREE_INPUT_MAX_CHARS,
+        3200,
+        2400,
+        1600,
+        1200,
+        800,
+    ):
+        combined_s3 = _join_chunk_summaries_capped_for_section_three(
+            chunk_summaries, max_total_chars=cap
+        )
+        candidate = build_section_three_followup_prompt(combined_s3, rules)
+        if _prompt_fits_groq_budget(candidate, want_completion=MIN_COMPLETION_TOKENS):
+            s3_prompt = candidate
+            break
+
+    if s3_prompt is not None:
+        if verbose:
+            print("   テーマ③を専用リクエストで補完しています…")
+        time.sleep(CHUNK_WAIT_SECONDS)
+        section_three = call_groq(
+            client, s3_prompt, max_tokens=MAX_COMPLETION_TOKENS_SECTION_THREE
+        )
+        full_summary = merge_section_three_into_full_summary(full_summary, section_three)
+
+    return full_summary
 
 
 # ------------------------------------------------------------------ #
