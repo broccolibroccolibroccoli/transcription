@@ -232,7 +232,54 @@ hr {
     max-width: 100% !important;
 }
 
-[data-testid="stFileUploader"] {
+/* ===== サイドバー: アップロード全体を1枚のカード（操作エリアと状態を内包）===== */
+[data-testid="stSidebar"] [data-testid="stFileUploader"] {
+    background: #ffffff !important;
+    border: 1px solid var(--academy-border) !important;
+    border-radius: 12px !important;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06) !important;
+    padding: 1rem 1rem 1.125rem 1rem !important;
+    box-sizing: border-box !important;
+    margin-top: 0.5rem !important;
+    margin-bottom: 0.75rem !important;
+}
+
+/* 点線枠＝カード内の「アップロード操作」ゾーン（1まとまり） */
+[data-testid="stSidebar"] [data-testid="stFileUploader"] [data-testid="stFileUploaderDropzone"] {
+    background: #f8fafc !important;
+    border: 2px dashed #94a3b8 !important;
+    border-radius: 10px !important;
+    padding: 1.125rem 1.25rem !important;
+    gap: 0.875rem !important;
+    align-items: center !important;
+}
+
+/* ファイル選択後：操作完了状態（ドロップゾーンがファイル行に切り替わる） */
+[data-testid="stSidebar"] [data-testid="stFileUploaderDropzone"]:has([data-testid="stFileUploaderDeleteBtn"]) {
+    background: #f1f5f9 !important;
+    border: 1px solid var(--academy-border) !important;
+    border-style: solid !important;
+    align-items: stretch !important;
+    padding: 0.75rem 0.85rem !important;
+    gap: 0.75rem !important;
+}
+
+/* アップロード済み1件：pill風（左アイコン・中央テキスト・右×） */
+[data-testid="stSidebar"] [data-testid="stFileUploaderDropzone"]:has([data-testid="stFileUploaderDeleteBtn"]) > div:first-child {
+    background: #ffffff !important;
+    border: 1px solid #e2e8f0 !important;
+    border-radius: 9999px !important;
+    padding: 0.5rem 0.65rem 0.5rem 0.85rem !important;
+    margin-top: 0.25rem !important;
+    box-sizing: border-box !important;
+    width: 100% !important;
+    min-height: 2.75rem !important;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05) !important;
+}
+
+/* メインエリアのみ：従来の点線ドロップゾーン（サイドバーは下でカード内に再定義） */
+.main [data-testid="stFileUploader"],
+[data-testid="stMainBlockContainer"] [data-testid="stFileUploader"] {
     background: var(--accent-soft) !important;
     border: 2px dashed var(--accent) !important;
     border-radius: 12px !important;
@@ -253,18 +300,15 @@ hr {
     min-width: 0 !important;
 }
 
-/* サイドバー: Streamlit 既定は横並び flex のため、ドロップゾーン内を縦方向・中央揃えに上書き */
+/* サイドバー: ドロップゾーン flex（上書きはカード内ブロックで済ませ、ここはレイアウトのみ） */
 [data-testid="stSidebar"] [data-testid="stFileUploaderDropzone"] {
     display: flex !important;
     flex-direction: column !important;
-    align-items: stretch !important;
     justify-content: flex-start !important;
-    gap: 0.45rem !important;
     width: 100% !important;
     box-sizing: border-box !important;
     min-width: 0 !important;
     min-height: fit-content !important;
-    padding: 0.65rem 0.45rem 0.75rem !important;
     overflow: visible !important;
 }
 [data-testid="stSidebar"] [data-testid="stFileUploaderDropzone"] > * {
@@ -311,17 +355,18 @@ hr {
     white-space: normal !important;
     overflow: visible !important;
 }
-/* 2. 「または」 */
+/* 2. 「または」（補助・小さく・薄く） */
 [data-testid="stSidebar"] [data-testid="stFileUploaderDropzoneInstructions"]::after,
 [data-testid="stSidebar"] [data-testid="stFileUploader"] [class*="Instructions"]::after {
     content: "または" !important;
     display: block !important;
-    font-size: 0.78rem !important;
+    font-size: 0.72rem !important;
     line-height: 1.4 !important;
-    color: var(--academy-text-muted) !important;
+    font-weight: 400 !important;
+    color: #94a3b8 !important;
     text-align: center !important;
     width: 100% !important;
-    margin-top: 0.35rem !important;
+    margin-top: 0.5rem !important;
     padding: 0 0.35rem !important;
     white-space: nowrap !important;
     overflow: visible !important;
@@ -341,7 +386,7 @@ hr {
     max-width: 100% !important;
     box-sizing: border-box !important;
     padding: 0.15rem 0.4rem 0 !important;
-    margin-top: 0.1rem !important;
+    margin-top: 0.75rem !important;
     flex-shrink: 0 !important;
     order: 3 !important;
     align-self: stretch !important;
@@ -393,9 +438,7 @@ hr {
 /* サイドバーは上記より後で再指定（Streamlit 既定の横並び section を確実に縦積みに） */
 [data-testid="stSidebar"] [data-testid="stFileUploader"] [data-testid="stFileUploaderDropzone"] {
     flex-direction: column !important;
-    align-items: stretch !important;
     justify-content: flex-start !important;
-    gap: 0.45rem !important;
     overflow: visible !important;
 }
 [data-testid="stSidebar"] [data-testid="stFileUploader"] {
@@ -403,7 +446,7 @@ hr {
     min-height: 0 !important;
 }
 
-/* サイドバー: 「ファイルを選択」ボタンを中央・幅いっぱい */
+/* サイドバー: 「ファイルを選択」中央・横幅は固定（広げすぎない） */
 [data-testid="stSidebar"] [data-testid="stFileUploaderDropzone"] > span {
     width: 100% !important;
     max-width: 100% !important;
@@ -411,11 +454,13 @@ hr {
     justify-content: center !important;
     align-items: center !important;
     box-sizing: border-box !important;
+    margin-top: 0.25rem !important;
 }
 [data-testid="stSidebar"] [data-testid="stFileUploaderDropzone"] button[data-testid="stBaseButton-secondary"],
 [data-testid="stSidebar"] [data-testid="stFileUploaderDropzone"] button:not([kind="primary"]):not([data-testid="stBaseButton-minimal"]) {
     width: 100% !important;
-    max-width: 100% !important;
+    max-width: 13.5rem !important;
+    min-width: 10rem !important;
     margin-left: auto !important;
     margin-right: auto !important;
     box-sizing: border-box !important;
@@ -478,10 +523,6 @@ hr {
     padding-bottom: 0.1rem !important;
 }
 [data-testid="stSidebar"] .stExpander {
-    margin-top: 0.25rem !important;
-    margin-bottom: 0.25rem !important;
-}
-[data-testid="stSidebar"] [data-testid="stFileUploader"] {
     margin-top: 0.25rem !important;
     margin-bottom: 0.25rem !important;
 }
@@ -606,6 +647,13 @@ hr {
 /* フォント */
 html, body, [class*="css"] {
     font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", "Hiragino Kaku Gothic ProN", "Hiragino Sans", Meiryo, sans-serif !important;
+}
+
+/* サイドバー狭幅：アップロードボタンはカード内で折り返し許容 */
+@media (max-width: 420px) {
+    [data-testid="stSidebar"] [data-testid="stFileUploaderDropzone"] button[data-testid="stBaseButton-secondary"] {
+        max-width: 100% !important;
+    }
 }
 </style>
 """
