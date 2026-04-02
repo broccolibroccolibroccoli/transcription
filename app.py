@@ -232,49 +232,54 @@ hr {
     max-width: 100% !important;
 }
 
-/* ===== サイドバー: アップロード全体を1枚のカード（操作エリアと状態を内包）===== */
+/* ===== サイドバー: アップロード外枠は実線・シャドウなし（余白のみでまとまり）===== */
 [data-testid="stSidebar"] [data-testid="stFileUploader"] {
-    background: #ffffff !important;
-    border: 1px solid var(--academy-border) !important;
-    border-radius: 12px !important;
-    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06) !important;
-    padding: 1rem 1rem 1.125rem 1rem !important;
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    padding: 0 !important;
     box-sizing: border-box !important;
-    margin-top: 0.5rem !important;
-    margin-bottom: 0.75rem !important;
+    margin: 0.5rem 0 0.75rem 0 !important;
+}
+[data-testid="stSidebar"] [data-testid="stFileUploader"] > div {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
 }
 
-/* 点線枠＝カード内の「アップロード操作」ゾーン（1まとまり） */
+/* 囲みは点線のみ＝唯一のコンテナ（主枠・内側 padding 16〜24px） */
 [data-testid="stSidebar"] [data-testid="stFileUploader"] [data-testid="stFileUploaderDropzone"] {
     background: #f8fafc !important;
     border: 2px dashed #94a3b8 !important;
     border-radius: 10px !important;
-    padding: 1.125rem 1.25rem !important;
+    padding: 1.25rem 1.5rem !important;
     gap: 0.875rem !important;
     align-items: center !important;
+    box-shadow: none !important;
 }
 
-/* ファイル選択後：操作完了状態（ドロップゾーンがファイル行に切り替わる） */
+/* ファイル選択後も実線に切り替えず、点線のみのまま（背景だけフラットに変化） */
 [data-testid="stSidebar"] [data-testid="stFileUploaderDropzone"]:has([data-testid="stFileUploaderDeleteBtn"]) {
     background: #f1f5f9 !important;
-    border: 1px solid var(--academy-border) !important;
-    border-style: solid !important;
+    border: 2px dashed #94a3b8 !important;
     align-items: stretch !important;
-    padding: 0.75rem 0.85rem !important;
+    padding: 0.75rem 1rem !important;
     gap: 0.75rem !important;
 }
 
-/* アップロード済み1件：pill風（左アイコン・中央テキスト・右×） */
+/* アップロード済み1件：pillは枠線なし・フラット（余白と背景で区切り） */
 [data-testid="stSidebar"] [data-testid="stFileUploaderDropzone"]:has([data-testid="stFileUploaderDeleteBtn"]) > div:first-child {
     background: #ffffff !important;
-    border: 1px solid #e2e8f0 !important;
+    border: none !important;
     border-radius: 9999px !important;
     padding: 0.5rem 0.65rem 0.5rem 0.85rem !important;
     margin-top: 0.25rem !important;
     box-sizing: border-box !important;
     width: 100% !important;
     min-height: 2.75rem !important;
-    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05) !important;
+    box-shadow: none !important;
 }
 
 /* メインエリアのみ：従来の点線ドロップゾーン（サイドバーは下でカード内に再定義） */
