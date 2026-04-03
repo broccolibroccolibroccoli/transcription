@@ -384,12 +384,12 @@ hr {
 [data-testid="stSidebar"] [data-testid="stFileUploader"] [class*="Instructions"] * {
     display: none !important;
 }
-/* 1. メイン「ファイルをドラッグ＆ドロップ」 */
+/* 1. メイン「ファイルをドラッグ＆ドロップ」（1行・改行しない） */
 [data-testid="stSidebar"] [data-testid="stFileUploaderDropzoneInstructions"]::before,
 [data-testid="stSidebar"] [data-testid="stFileUploader"] [class*="Instructions"]::before {
     content: "ファイルをドラッグ＆ドロップ" !important;
     display: block !important;
-    font-size: 1rem !important;
+    font-size: clamp(0.8125rem, 1.1vw + 0.65rem, 1rem) !important;
     font-weight: 600 !important;
     line-height: 1.4 !important;
     color: var(--academy-slate) !important;
@@ -398,8 +398,9 @@ hr {
     max-width: 100% !important;
     box-sizing: border-box !important;
     padding: 0 0.35rem !important;
-    white-space: normal !important;
-    overflow: visible !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
 }
 /* 2. 「または」（補助・小さく・薄く） */
 [data-testid="stSidebar"] [data-testid="stFileUploaderDropzoneInstructions"]::after,
@@ -417,15 +418,15 @@ hr {
     white-space: nowrap !important;
     overflow: visible !important;
 }
-/* 4.5. 補足2行（ボタンの下・section::after + order:3） */
+/* 4.5. 補足（意味のまとまりで改行・text-sm / leading-relaxed） */
 [data-testid="stSidebar"] [data-testid="stFileUploaderDropzone"]::after {
-    content: "1ファイル最大30分、200MBまで\\Amp4, wav, mp3, m4a, flacなどの音声ファイルに対応" !important;
+    content: "1ファイル最大30分、200MBまで\\A対応形式：mp4, wav, mp3, m4a, flac" !important;
     display: block !important;
-    white-space: pre-wrap !important;
-    word-break: break-word !important;
-    overflow-wrap: anywhere !important;
-    font-size: 0.65rem !important;
-    line-height: 1.5 !important;
+    white-space: pre-line !important;
+    word-break: keep-all !important;
+    overflow-wrap: break-word !important;
+    font-size: 0.875rem !important;
+    line-height: 1.625 !important;
     color: var(--academy-text-muted) !important;
     text-align: center !important;
     width: 100% !important;
@@ -445,10 +446,11 @@ hr {
 }
 .main [data-testid="stFileUploaderDropzoneInstructions"]::before,
 .main [data-testid="stFileUploader"] [class*="Instructions"]::before {
-    content: "1ファイル最大30分、200MBまで\\Amp4, wav, mp3, m4a, flacなどの音声ファイルに対応" !important;
-    white-space: pre !important;
+    content: "1ファイル最大30分、200MBまで\\A対応形式：mp4, wav, mp3, m4a, flac" !important;
+    white-space: pre-line !important;
+    word-break: keep-all !important;
     font-size: 0.875rem !important;
-    line-height: 1.45 !important;
+    line-height: 1.625 !important;
     color: var(--academy-text-muted) !important;
     display: block !important;
     text-align: center !important;
@@ -505,6 +507,7 @@ hr {
 }
 /* サイドバー: Browse ボタン — flex 横並び・改行なし・寸法固定（アイコン＋ラベルのバランス） */
 [data-testid="stSidebar"] [data-testid="stFileUploader"] button[data-testid="stBaseButton-secondary"] {
+    position: relative !important;
     display: inline-flex !important;
     flex-direction: row !important;
     align-items: center !important;
@@ -527,6 +530,22 @@ hr {
     flex-shrink: 0 !important;
     width: 1.1rem !important;
     height: 1.1rem !important;
+}
+
+/* Streamlit 既定の「Upload / Browse」等の英語ラベルを非表示（::after の「ファイルを選択」のみ表示） */
+[data-testid="stSidebar"] [data-testid="stFileUploader"] button[data-testid="stBaseButton-secondary"] span,
+[data-testid="stSidebar"] [data-testid="stFileUploader"] button[data-testid="stBaseButton-secondary"] p,
+.main [data-testid="stFileUploader"] button[data-testid="stBaseButton-secondary"] span,
+.main [data-testid="stFileUploader"] button[data-testid="stBaseButton-secondary"] p {
+    position: absolute !important;
+    width: 1px !important;
+    height: 1px !important;
+    padding: 0 !important;
+    margin: -1px !important;
+    overflow: hidden !important;
+    clip: rect(0, 0, 0, 0) !important;
+    white-space: nowrap !important;
+    border: 0 !important;
 }
 
 /* ファイルを選択ボタン（Browse）のみ。Remove（×）ボタンは除外 */
@@ -1299,7 +1318,7 @@ DRAG_OVERLAY_HTML = """
         overlay = doc.createElement('div');
         overlay.id = 'transcription-drop-overlay';
         overlay.style.cssText = 'display:none;position:absolute;inset:0;background:rgba(42,171,159,0.9);z-index:99999;align-items:center;justify-content:center;pointer-events:none;';
-        overlay.innerHTML = '<div style="font-size:1.1rem;font-weight:600;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,0.5);text-align:center;">ここにファイルをドロップ</div>';
+        overlay.innerHTML = '<div style="font-size:0.9375rem;font-weight:600;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,0.5);text-align:center;white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis;padding:0 0.5rem;box-sizing:border-box;">ここにファイルをドロップ</div>';
         sidebar.appendChild(overlay);
         bindDropzone();
     }
