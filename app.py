@@ -950,6 +950,144 @@ def insert_summary(file_id: int, content: str, model_used: str) -> bool:
         conn.close()
 
 
+PROJECT_TRANSCRIPT_HEADER = (
+    "【以下は同一プロジェクト内の複数音声の文字起こしを、ファイルごとに区切りながら結合したものです。】\n\n"
+)
+
+
+def get_project_files_with_segments(project_id: int) -> list[tuple[int, str]]:
+    """セグメントが1件以上あるファイルのみ (file_id, filename) を順に返す。"""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        SELECT DISTINCT f.id, f.filename
+        FROM files f
+        WHERE f.project_id = ?
+        AND EXISTS (SELECT 1 FROM segments s WHERE s.file_id = f.id)
+        ORDER BY f.processed_at ASC, f.filename ASC
+        """,
+        (project_id,),
+    )
+    rows = cursor.fetchall()
+    conn.close()
+    return rows
+
+
+def build_project_transcript_text(project_id: int) -> str:
+    """プロジェクト内の全ファイルの文字起こしを1テキストに結合する。"""
+    files = get_project_files_with_segments(project_id)
+    if not files:
+        return ""
+    parts: list[str] = [PROJECT_TRANSCRIPT_HEADER]
+    for fid, fname in files:
+        segments = get_segments_by_file_id(fid)
+        if not segments:
+            continue
+        parts.append(f"=== ファイル: {fname} ===\n")
+        parts.append(
+            segments_rows_to_transcript(list(segments), apply_boundary_fix=True)
+        )
+    if len(parts) <= 1:
+        return ""
+    return "\n\n".join(parts)
+
+
+def get_latest_project_summary(project_id: int):
+    """最新のプロジェクト要約（content, model_used, created_at）。なければ None。"""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        SELECT content, model_used, created_at FROM project_summaries
+        WHERE project_id = ?
+        ORDER BY created_at DESC LIMIT 1
+        """,
+        (project_id,),
+    )
+    row = cursor.fetchone()
+    conn.close()
+    return row
+
+
+def insert_project_summary(project_id: int, content: str, model_used: str) -> bool:
+    """プロジェクト要約を project_summaries に保存する。"""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            """
+            INSERT INTO project_summaries (project_id, content, model_used)
+            VALUES (?, ?, ?)
+            """,
+            (project_id, content, model_used or GROQ_MODEL),
+        )
+        conn.commit()
+        return cursor.rowcount > 0
+    except Exception:
+        conn.rollback()
+        return False
+    finally:
+        conn.close()
+
+
+def render_project_summary_section(project_id: int, project_name: str) -> None:
+    """登録ファイル一覧: プロジェクト名直下に、ファイル要約と同様のプロジェクト単位要約 UI を置く。"""
+    safe_stub = "".join(
+        c for c in (project_name or "project") if c not in '\\/:*?"<>|\n\r\t'
+    ).strip()[:80] or "project"
+    with st.expander("📊 プロジェクト要約（Groq）", expanded=False):
+        if not os.path.isfile(SUMMARY_RULES_PATH):
+            st.warning("要約ルール `summary_rules.csv` が見つかりません。")
+            return
+        prev = get_latest_project_summary(project_id)
+        if prev:
+            content, model_used, created_at = prev
+            st.caption(f"保存済み · モデル: {model_used or GROQ_MODEL} · {created_at}")
+            summary_rules = (
+                load_rules(SUMMARY_RULES_PATH)
+                if os.path.isfile(SUMMARY_RULES_PATH)
+                else {}
+            )
+            display_summary_content(content, summary_rules)
+            st.download_button(
+                "要約を .csv でダウンロード",
+                data=(content or "").encode("utf-8-sig"),
+                file_name=f"{safe_stub}_プロジェクト要約.csv",
+                mime="text/csv",
+                key=f"proj_summary_dl_{project_id}",
+            )
+        groq_key = get_groq_api_key()
+        if not groq_key:
+            st.error(
+                "GROQ_API_KEY が未設定です。.env または Streamlit Secrets に設定してください。"
+            )
+        elif st.button(
+            "要約を生成" if not prev else "要約を再生成",
+            key=f"summarize_project_{project_id}",
+            type="secondary",
+        ):
+            raw_text = build_project_transcript_text(project_id)
+            if not raw_text.strip():
+                st.warning(
+                    "このプロジェクトに、要約できる文字起こし（セグメント）があるファイルがありません。"
+                )
+            else:
+                rules = load_rules(SUMMARY_RULES_PATH)
+                transcript = preprocess_transcript(raw_text, rules)
+                with st.spinner(
+                    "Groq でプロジェクト要約中…（複数ファイル・長文はチャンク分割のため数分かかる場合があります）"
+                ):
+                    md_summary = summarize_with_groq(transcript, rules, api_key=groq_key)
+                    md_summary = postprocess_summary_markdown(md_summary, rules)
+                    summary_text = summary_markdown_to_csv(md_summary)
+                if insert_project_summary(project_id, summary_text, GROQ_MODEL):
+                    st.success("プロジェクト要約を保存しました。")
+                    st.rerun()
+                else:
+                    st.error("プロジェクト要約の保存に失敗しました。")
+
+
 def segments_to_csv(segments: list) -> bytes:
     """セグメントリストをCSV形式のバイト列に変換（UTF-8 BOM付きでExcel対応）"""
     output = io.StringIO()
@@ -1798,13 +1936,14 @@ elif not files:
 else:
     st.header("📋 登録ファイル一覧")
 
-    # プロジェクトごとにグループ化（「すべて」表示時）
-    current_project_name = None
+    # プロジェクトごとにグループ化（見出しの直下にプロジェクト単位要約）
+    prev_project_id = None
     for row in files:
         file_id, filename, duration, status, processed_at, error_msg, project_id, project_name = row
-        if selected_proj is None and project_name != current_project_name:
-            current_project_name = project_name
+        if project_id != prev_project_id:
+            prev_project_id = project_id
             st.subheader(f"📁 {project_name}", divider="gray")
+            render_project_summary_section(project_id, project_name)
         # ファイル行: ファイル名（クリックで別ページへ）| 3点リーダーメニュー
         col_name, col_menu = st.columns([10, 1])
         with col_name:

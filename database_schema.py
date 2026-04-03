@@ -86,6 +86,35 @@ def migrate_to_projects(db_path: str) -> None:
         conn.close()
 
 
+def migrate_project_summaries(db_path: str) -> None:
+    """プロジェクト単位の要約テーブルを追加（既存DB向け）。"""
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='project_summaries'"
+        )
+        if cursor.fetchone():
+            return
+        cursor.execute("""
+            CREATE TABLE project_summaries (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                project_id INTEGER NOT NULL,
+                content TEXT NOT NULL,
+                model_used TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+            )
+        """)
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_project_summaries_project_id "
+            "ON project_summaries(project_id)"
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
 def create_database_schema(db_path: str = "transcription.db"):
     """
     データベーススキーマを作成します。
@@ -169,6 +198,9 @@ def create_database_schema(db_path: str = "transcription.db"):
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_segments_start_time ON segments(start_time)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_files_filename ON files(filename)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_summaries_file_id ON summaries(file_id)")
+
+    # プロジェクト単位の要約
+    migrate_project_summaries(db_path)
 
     conn.commit()
     conn.close()
