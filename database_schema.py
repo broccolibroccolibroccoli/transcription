@@ -11,7 +11,7 @@ def migrate_to_projects(db_path: str) -> None:
     """
     既存DBにプロジェクト機能を追加するマイグレーション
     """
-    conn = sqlite3.connect(db_path)
+    conn = sqlite3.connect(db_path, timeout=30.0)
     cursor = conn.cursor()
     try:
         # projectsテーブルが既に存在するか確認
@@ -86,30 +86,34 @@ def migrate_to_projects(db_path: str) -> None:
         conn.close()
 
 
+def migrate_project_summaries_cursor(cursor: sqlite3.Cursor) -> None:
+    """同一接続上で project_summaries テーブルを追加（別接続を開かない＝ロック回避）。"""
+    cursor.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='project_summaries'"
+    )
+    if cursor.fetchone():
+        return
+    cursor.execute("""
+        CREATE TABLE project_summaries (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            project_id INTEGER NOT NULL,
+            content TEXT NOT NULL,
+            model_used TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+        )
+    """)
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_project_summaries_project_id "
+        "ON project_summaries(project_id)"
+    )
+
+
 def migrate_project_summaries(db_path: str) -> None:
-    """プロジェクト単位の要約テーブルを追加（既存DB向け）。"""
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
+    """単体実行・テスト用: 専用接続で project_summaries を作成。"""
+    conn = sqlite3.connect(db_path, timeout=30.0)
     try:
-        cursor.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='project_summaries'"
-        )
-        if cursor.fetchone():
-            return
-        cursor.execute("""
-            CREATE TABLE project_summaries (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                project_id INTEGER NOT NULL,
-                content TEXT NOT NULL,
-                model_used TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
-            )
-        """)
-        cursor.execute(
-            "CREATE INDEX IF NOT EXISTS idx_project_summaries_project_id "
-            "ON project_summaries(project_id)"
-        )
+        migrate_project_summaries_cursor(conn.cursor())
         conn.commit()
     finally:
         conn.close()
@@ -122,12 +126,10 @@ def create_database_schema(db_path: str = "transcription.db"):
     Args:
         db_path: データベースファイルのパス
     """
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
-
-    # プロジェクトテーブル（既存DBのマイグレーション）
+    # プロジェクトテーブル（既存DBのマイグレーション）— 自前で接続を閉じる
     migrate_to_projects(db_path)
-    conn = sqlite3.connect(db_path)
+
+    conn = sqlite3.connect(db_path, timeout=30.0)
     cursor = conn.cursor()
 
     # projectsテーブル（新規作成時用）
@@ -199,8 +201,8 @@ def create_database_schema(db_path: str = "transcription.db"):
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_files_filename ON files(filename)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_summaries_file_id ON summaries(file_id)")
 
-    # プロジェクト単位の要約
-    migrate_project_summaries(db_path)
+    # プロジェクト単位の要約（同一 conn 上で実行し database is locked を防ぐ）
+    migrate_project_summaries_cursor(cursor)
 
     conn.commit()
     conn.close()
