@@ -345,6 +345,11 @@ hr {
     max-width: 100% !important;
     min-width: 0 !important;
 }
+/* 疑似要素の全文が親で切れないようサイドバーのみ可視オーバーフロー */
+[data-testid="stSidebar"] [data-testid="stFileUploaderDropzoneInstructions"],
+[data-testid="stSidebar"] [data-testid="stFileUploader"] [class*="Instructions"] {
+    overflow: visible !important;
+}
 
 /* サイドバー: ドロップゾーン flex（上書きはカード内ブロックで済ませ、ここはレイアウトのみ） */
 [data-testid="stSidebar"] [data-testid="stFileUploaderDropzone"] {
@@ -384,23 +389,23 @@ hr {
 [data-testid="stSidebar"] [data-testid="stFileUploader"] [class*="Instructions"] * {
     display: none !important;
 }
-/* 1. メイン「ファイルをドラッグ＆ドロップ」（1行・改行しない） */
+/* 1. メイン「ファイルをドラッグ＆ドロップ」（省略せず、狭い幅ではフォントを下げて1行に収める） */
 [data-testid="stSidebar"] [data-testid="stFileUploaderDropzoneInstructions"]::before,
 [data-testid="stSidebar"] [data-testid="stFileUploader"] [class*="Instructions"]::before {
     content: "ファイルをドラッグ＆ドロップ" !important;
     display: block !important;
-    font-size: clamp(0.8125rem, 1.1vw + 0.65rem, 1rem) !important;
+    font-size: clamp(0.625rem, 1.4vw + 0.35rem, 0.8125rem) !important;
     font-weight: 600 !important;
-    line-height: 1.4 !important;
+    line-height: 1.35 !important;
     color: var(--academy-slate) !important;
     text-align: center !important;
     width: 100% !important;
     max-width: 100% !important;
     box-sizing: border-box !important;
-    padding: 0 0.35rem !important;
+    padding: 0 0.25rem !important;
     white-space: nowrap !important;
-    overflow: hidden !important;
-    text-overflow: ellipsis !important;
+    overflow: visible !important;
+    text-overflow: clip !important;
 }
 /* 2. 「または」（補助・小さく・薄く） */
 [data-testid="stSidebar"] [data-testid="stFileUploaderDropzoneInstructions"]::after,
@@ -505,24 +510,24 @@ hr {
     box-sizing: border-box !important;
     margin-top: 0.25rem !important;
 }
-/* サイドバー: Browse ボタン — flex 横並び・改行なし・寸法固定（アイコン＋ラベルのバランス） */
+/* サイドバー: Browse ボタン — 幅いっぱいに伸ばし、アイコン＋ラベルを左右中央に */
 [data-testid="stSidebar"] [data-testid="stFileUploader"] button[data-testid="stBaseButton-secondary"] {
     position: relative !important;
-    display: inline-flex !important;
+    display: flex !important;
     flex-direction: row !important;
     align-items: center !important;
     justify-content: center !important;
     flex-wrap: nowrap !important;
     gap: 0.5rem !important;
     white-space: nowrap !important;
-    min-width: 220px !important;
-    max-width: 260px !important;
-    width: auto !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
     height: 44px !important;
     min-height: 44px !important;
-    padding: 0 1.25rem !important;
-    margin-left: auto !important;
-    margin-right: auto !important;
+    padding: 0 1rem !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
     box-sizing: border-box !important;
 }
 [data-testid="stSidebar"] [data-testid="stFileUploader"] button[data-testid="stBaseButton-secondary"] svg,
@@ -576,7 +581,6 @@ hr {
     line-height: 1.2 !important;
     flex-shrink: 0 !important;
 }
-
 /* Remove（×）ボタンに「ファイルを選択」が表示されないよう明示的に空に */
 [data-testid="stFileUploader"] [data-testid="stFileUploaderDeleteBtn"] button::after,
 [data-testid="stFileUploader"] [data-testid="stBaseButton-minimal"]::after {
@@ -734,11 +738,12 @@ html, body, [class*="css"] {
     font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", "Hiragino Kaku Gothic ProN", "Hiragino Sans", Meiryo, sans-serif !important;
 }
 
-/* サイドバー狭幅：最小幅は維持しつつ親幅を超えない */
+/* サイドバー狭幅：ボタンは親いっぱい・中央寄せを維持 */
 @media (max-width: 420px) {
     [data-testid="stSidebar"] [data-testid="stFileUploader"] button[data-testid="stBaseButton-secondary"] {
-        min-width: min(100%, 220px) !important;
+        width: 100% !important;
         max-width: 100% !important;
+        min-width: 0 !important;
         padding: 0 1rem !important;
     }
 }
