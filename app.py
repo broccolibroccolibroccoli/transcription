@@ -530,13 +530,6 @@ hr {
     margin-right: 0 !important;
     box-sizing: border-box !important;
 }
-[data-testid="stSidebar"] [data-testid="stFileUploader"] button[data-testid="stBaseButton-secondary"] svg,
-[data-testid="stSidebar"] [data-testid="stFileUploader"] button[data-testid="stBaseButton-secondary"] [data-testid="stIconMaterial"] {
-    flex-shrink: 0 !important;
-    width: 1.1rem !important;
-    height: 1.1rem !important;
-}
-
 /* Streamlit 既定の「Upload / Browse」等の英語ラベルを非表示（::after の「ファイルを選択」のみ表示） */
 [data-testid="stSidebar"] [data-testid="stFileUploader"] button[data-testid="stBaseButton-secondary"] span,
 [data-testid="stSidebar"] [data-testid="stFileUploader"] button[data-testid="stBaseButton-secondary"] p,
@@ -551,6 +544,14 @@ hr {
     clip: rect(0, 0, 0, 0) !important;
     white-space: nowrap !important;
     border: 0 !important;
+}
+/* サイドバー: Streamlit は span 以外（div 等）にラベルを置くため、子要素をすべてレイアウトから除外 */
+[data-testid="stSidebar"] [data-testid="stFileUploader"] button[data-testid="stBaseButton-secondary"]::before {
+    content: none !important;
+    display: none !important;
+}
+[data-testid="stSidebar"] [data-testid="stFileUploader"] button[data-testid="stBaseButton-secondary"] > * {
+    display: none !important;
 }
 
 /* ファイルを選択ボタン（Browse）のみ。Remove（×）ボタンは除外 */
@@ -580,6 +581,26 @@ hr {
     white-space: nowrap !important;
     line-height: 1.2 !important;
     flex-shrink: 0 !important;
+}
+/* サイドバー: ラベルは幅いっぱいに広げて text-align で中央（translate より確実） */
+[data-testid="stSidebar"] [data-testid="stFileUploader"] button[data-testid="stBaseButton-secondary"]::after,
+[data-testid="stSidebar"] [data-testid="stFileUploader"] [data-testid="stFileUploaderDropzone"] button[kind="secondary"]:not([data-testid="stBaseButton-minimal"])::after {
+    position: absolute !important;
+    left: 0 !important;
+    right: 0 !important;
+    top: 50% !important;
+    transform: translateY(-50%) !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+    padding: 0 0.75rem !important;
+    margin: 0 !important;
+    text-align: center !important;
+    display: block !important;
+}
+/* testid が無い Streamlit 向け: 子要素をまとめて非表示 */
+[data-testid="stSidebar"] [data-testid="stFileUploader"] [data-testid="stFileUploaderDropzone"] button[kind="secondary"]:not([data-testid="stBaseButton-minimal"]) > * {
+    display: none !important;
 }
 /* Remove（×）ボタンに「ファイルを選択」が表示されないよう明示的に空に */
 [data-testid="stFileUploader"] [data-testid="stFileUploaderDeleteBtn"] button::after,
@@ -1344,6 +1365,35 @@ DRAG_OVERLAY_HTML = """
         });
         dz.addEventListener('drop', hideO);
     }
+
+    /* Streamlit のバージョン差で div 等にラベルが残り右寄りに見える対策（子を非表示） */
+    function fixBrowseButton() {
+        try {
+            var dz = doc.querySelector('[data-testid="stSidebar"] [data-testid="stFileUploaderDropzone"]');
+            if (!dz) return;
+            var btn = dz.querySelector('button[data-testid="stBaseButton-secondary"]');
+            if (!btn) {
+                btn = dz.querySelector('button[kind="secondary"]:not([data-testid="stBaseButton-minimal"])');
+            }
+            if (!btn) return;
+            for (var i = 0; i < btn.children.length; i++) {
+                btn.children[i].style.setProperty('display', 'none', 'important');
+            }
+        } catch (e) {}
+    }
+    function attachBrowseButtonFix() {
+        var sb = doc.querySelector('[data-testid="stSidebar"]');
+        if (!sb) return;
+        fixBrowseButton();
+        if (window._transcriptionBrowseFixMo) return;
+        window._transcriptionBrowseFixMo = new MutationObserver(function() {
+            fixBrowseButton();
+        });
+        window._transcriptionBrowseFixMo.observe(sb, { childList: true, subtree: true });
+    }
+    setTimeout(attachBrowseButtonFix, 0);
+    setTimeout(attachBrowseButtonFix, 300);
+    setTimeout(attachBrowseButtonFix, 1000);
 })();
 </script>
 """
