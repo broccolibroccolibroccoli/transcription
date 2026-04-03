@@ -29,8 +29,45 @@ UPLOADS_DIR = os.path.join(BASE_DIR, "uploads")
 SUMMARY_RULES_PATH = os.path.join(BASE_DIR, "summary_rules.csv")
 
 
+def _normalize_dataframe_columns(df) -> None:
+    """BOM 付き列名などを正規化する。"""
+    df.columns = [str(c).strip().lstrip("\ufeff") for c in df.columns]
+
+
+def _dataframe_summary_to_markdown(df) -> str:
+    """theme/category/content の DataFrame を Markdown に整形（st.dataframe の行線を避ける）。"""
+    import pandas as pd
+
+    def s(v) -> str:
+        if pd.isna(v):
+            return ""
+        return str(v).strip()
+
+    current_theme = None
+    current_cat = None
+    parts: list[str] = []
+    for _, row in df.iterrows():
+        t = s(row.get("theme", ""))
+        c = s(row.get("category", ""))
+        x = s(row.get("content", ""))
+        if not x and not t and not c:
+            continue
+        if t != current_theme:
+            current_theme = t
+            current_cat = None
+            if t:
+                parts.append(f"## {t}\n")
+        if c != current_cat:
+            current_cat = c
+            if c:
+                parts.append(f"### {c}\n")
+        if x:
+            parts.append(f"* {x}\n")
+    return "".join(parts) if parts else "（空）"
+
+
 def display_summary_content(content: Optional[str]) -> None:
-    """要約を表示。CSV なら表、旧データが Markdown の場合はそのまま表示。"""
+    """要約を表示。CSV は Markdown に整形して表示（表コンポーネントの罫線を出さない）。"""
     if not content or not str(content).strip():
         st.caption("（空）")
         return
@@ -39,11 +76,16 @@ def display_summary_content(content: Optional[str]) -> None:
         import pandas as pd
 
         df = pd.read_csv(io.StringIO(text))
-        if list(df.columns) == ["content"] and len(df.columns) == 1:
+        _normalize_dataframe_columns(df)
+        cols = list(df.columns)
+        if cols == ["content"] and len(cols) == 1:
             cell = df.iloc[0, 0] if len(df) > 0 else ""
             st.markdown(str(cell) if pd.notna(cell) else "（空）")
             return
-        st.dataframe(df, use_container_width=True, hide_index=True)
+        if set(cols) >= {"theme", "category", "content"}:
+            st.markdown(_dataframe_summary_to_markdown(df))
+            return
+        st.text(df.to_string(index=False))
     except Exception:
         st.markdown(text)
 
