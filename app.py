@@ -99,7 +99,7 @@ def get_groq_api_key() -> str:
 
 
 # True にするとサイドバーに YouTube URL 入力タブを表示
-SHOW_YOUTUBE_UPLOAD = True
+SHOW_YOUTUBE_UPLOAD = False
 
 # Streamlit では set_page_config を最初の st 呼び出しにする（クラウドでの起動失敗を防ぐ）
 st.set_page_config(
