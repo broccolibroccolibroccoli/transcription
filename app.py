@@ -19,6 +19,7 @@ from summarize_transcript import (
     preprocess_transcript,
     summarize_with_groq,
     segments_rows_to_transcript,
+    summary_markdown_to_csv,
 )
 
 # 設定（デプロイ時はリポジトリ直下。環境変数 TRANSCRIPTION_BASE_DIR で上書き可）
@@ -26,6 +27,26 @@ BASE_DIR = os.environ.get("TRANSCRIPTION_BASE_DIR", os.path.dirname(os.path.absp
 DB_PATH = os.path.join(BASE_DIR, "transcription.db")
 UPLOADS_DIR = os.path.join(BASE_DIR, "uploads")
 SUMMARY_RULES_PATH = os.path.join(BASE_DIR, "summary_rules.csv")
+
+
+def display_summary_content(content: Optional[str]) -> None:
+    """要約を表示。CSV なら表、旧データが Markdown の場合はそのまま表示。"""
+    if not content or not str(content).strip():
+        st.caption("（空）")
+        return
+    text = str(content).strip()
+    try:
+        import pandas as pd
+
+        df = pd.read_csv(io.StringIO(text))
+        if list(df.columns) == ["content"] and len(df.columns) == 1:
+            cell = df.iloc[0, 0] if len(df) > 0 else ""
+            st.markdown(str(cell) if pd.notna(cell) else "（空）")
+            return
+        st.dataframe(df, use_container_width=True, hide_index=True)
+    except Exception:
+        st.markdown(text)
+
 
 try:
     from dotenv import load_dotenv
@@ -1560,13 +1581,13 @@ if st.session_state.selected_file_id is not None:
                         if prev:
                             content, model_used, created_at = prev
                             st.caption(f"保存済み · モデル: {model_used or GROQ_MODEL} · {created_at}")
-                            st.markdown(content or "（空）")
+                            display_summary_content(content)
                             base_dl = os.path.splitext(filename)[0]
                             st.download_button(
-                                "要約を .md でダウンロード",
-                                data=content or "",
-                                file_name=f"{base_dl}_要約.md",
-                                mime="text/markdown",
+                                "要約を .csv でダウンロード",
+                                data=(content or "").encode("utf-8-sig"),
+                                file_name=f"{base_dl}_要約.csv",
+                                mime="text/csv",
                                 key=f"summary_dl_{file_id}",
                             )
                         groq_key = get_groq_api_key()
@@ -1587,9 +1608,10 @@ if st.session_state.selected_file_id is not None:
                             with st.spinner(
                                 "Groq で要約中…（長文はチャンク分割のため数分かかる場合があります）"
                             ):
-                                summary_text = summarize_with_groq(
+                                md_summary = summarize_with_groq(
                                     transcript, rules, api_key=groq_key
                                 )
+                                summary_text = summary_markdown_to_csv(md_summary)
                             if insert_summary(file_id, summary_text, GROQ_MODEL):
                                 st.success("要約を保存しました。")
                                 st.rerun()

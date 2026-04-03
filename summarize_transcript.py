@@ -27,12 +27,13 @@ Groq 無料枠の TPM 制限（6,000 tokens/分）に対応するため、
   python summarize_transcript.py \\
       --transcript transcription_with_speakers.txt \\
       --rules summary_rules.csv \\
-      --output summary_output.md
+      --output summary_output.csv
 """
 from __future__ import annotations
 
 import argparse
 import csv
+import io
 import os
 import re
 import time
@@ -451,6 +452,69 @@ def merge_section_three_into_full_summary(full: str, section_three_md: str) -> s
     return full.rstrip() + "\n\n" + t + "\n"
 
 
+def _parse_summary_markdown_to_rows(text: str) -> List[Tuple[str, str, str]]:
+    """
+    Groq が返す Markdown 要約を (theme, category, content) の行に分解する。
+    見出し・箇条書きの揺れに多少耐性を持たせる。
+    """
+    rows: List[Tuple[str, str, str]] = []
+    theme = ""
+    category = ""
+    inline_cat = re.compile(r"^\*\*(.+?)\*\*\s*:\s*(.+)$")
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        if line.startswith("## ") and not line.startswith("###"):
+            theme = line[3:].strip()
+            category = ""
+            continue
+        if line.startswith("### "):
+            category = line[4:].strip()
+            for s in ("**", "【", "】"):
+                category = category.replace(s, "")
+            category = category.strip()
+            continue
+        if line.startswith(("*", "-", "+")):
+            body = line.lstrip("*+-").strip()
+            m = inline_cat.match(body)
+            if m:
+                rows.append((theme, m.group(1).strip(), m.group(2).strip()))
+                continue
+            rows.append((theme, category, body))
+        elif theme and not line.startswith("#"):
+            rows.append((theme, category, line))
+    return rows
+
+
+def summary_markdown_to_csv(markdown_text: str) -> str:
+    """
+    Markdown 要約を UTF-8 の CSV 文字列に変換する（theme, category, content）。
+    パースできない場合は 1 列 content に全文を入れる。
+    """
+    md = (markdown_text or "").strip()
+    if not md:
+        buf = io.StringIO()
+        w = csv.writer(buf, lineterminator="\n")
+        w.writerow(["theme", "category", "content"])
+        return buf.getvalue()
+
+    parsed = _parse_summary_markdown_to_rows(md)
+    if not parsed:
+        buf = io.StringIO()
+        w = csv.writer(buf, lineterminator="\n", quoting=csv.QUOTE_MINIMAL)
+        w.writerow(["content"])
+        w.writerow([md])
+        return buf.getvalue()
+
+    buf = io.StringIO()
+    w = csv.writer(buf, lineterminator="\n", quoting=csv.QUOTE_MINIMAL)
+    w.writerow(["theme", "category", "content"])
+    for t, c, x in parsed:
+        w.writerow([t, c, x])
+    return buf.getvalue()
+
+
 def _merge_intermediate_batch(
     batch: List[str],
     rules: dict,
@@ -718,10 +782,12 @@ def summarize_transcript_text(
 ) -> str:
     """
     前処理・Groq 呼び出しまで一括実行。アプリから利用。
+    戻り値は CSV 文字列（UTF-8）。
     """
     rules = load_rules(rules_path)
     transcript = preprocess_transcript(transcript_raw, rules)
-    return summarize_with_groq(transcript, rules, api_key=api_key)
+    md = summarize_with_groq(transcript, rules, api_key=api_key)
+    return summary_markdown_to_csv(md)
 
 
 # ------------------------------------------------------------------ #
@@ -745,8 +811,8 @@ def main() -> None:
     )
     parser.add_argument(
         "--output",
-        default="summary_output.md",
-        help="要約結果の出力ファイルパス",
+        default="summary_output.csv",
+        help="要約結果の出力ファイルパス（CSV）",
     )
     args = parser.parse_args()
 
@@ -766,13 +832,14 @@ def main() -> None:
     print(f"   文字数（前処理後）: {len(transcript)}")
 
     print(f"\n🤖 Groq ({GROQ_MODEL}) で要約中...")
-    summary = summarize_with_groq(transcript, rules, verbose=True)
+    md_summary = summarize_with_groq(transcript, rules, verbose=True)
+    csv_summary = summary_markdown_to_csv(md_summary)
 
     with open(args.output, "w", encoding="utf-8") as f:
-        f.write(summary)
+        f.write(csv_summary)
     print(f"\n✅ 要約が完了しました → {args.output}")
     print("\n--- 要約プレビュー（先頭300文字）---")
-    print(summary[:300])
+    print(csv_summary[:300])
 
 
 if __name__ == "__main__":
