@@ -15,7 +15,9 @@ from typing import Optional
 from segment_postprocess import fix_speaker_boundary_rows
 from summarize_transcript import (
     GROQ_MODEL,
+    dataframe_summary_to_markdown,
     load_rules,
+    postprocess_summary_markdown,
     preprocess_transcript,
     summarize_with_groq,
     segments_rows_to_transcript,
@@ -34,40 +36,12 @@ def _normalize_dataframe_columns(df) -> None:
     df.columns = [str(c).strip().lstrip("\ufeff") for c in df.columns]
 
 
-def _dataframe_summary_to_markdown(df) -> str:
-    """theme/category/content の DataFrame を Markdown に整形（st.dataframe の行線を避ける）。"""
-    import pandas as pd
-
-    def s(v) -> str:
-        if pd.isna(v):
-            return ""
-        return str(v).strip()
-
-    current_theme = None
-    current_cat = None
-    parts: list[str] = []
-    for _, row in df.iterrows():
-        t = s(row.get("theme", ""))
-        c = s(row.get("category", ""))
-        x = s(row.get("content", ""))
-        if not x and not t and not c:
-            continue
-        if t != current_theme:
-            current_theme = t
-            current_cat = None
-            if t:
-                parts.append(f"## {t}\n")
-        if c != current_cat:
-            current_cat = c
-            if c:
-                parts.append(f"### {c}\n")
-        if x:
-            parts.append(f"* {x}\n")
-    return "".join(parts) if parts else "（空）"
-
-
-def display_summary_content(content: Optional[str]) -> None:
-    """要約を表示。CSV は Markdown に整形して表示（表コンポーネントの罫線を出さない）。"""
+def display_summary_content(
+    content: Optional[str], rules: Optional[dict] = None
+) -> None:
+    """要約を表示。CSV は Markdown に整形。ルールで話者タグを置換。"""
+    if rules is None:
+        rules = {}
     if not content or not str(content).strip():
         st.caption("（空）")
         return
@@ -80,14 +54,18 @@ def display_summary_content(content: Optional[str]) -> None:
         cols = list(df.columns)
         if cols == ["content"] and len(cols) == 1:
             cell = df.iloc[0, 0] if len(df) > 0 else ""
-            st.markdown(str(cell) if pd.notna(cell) else "（空）")
+            raw = str(cell) if pd.notna(cell) else ""
+            md = postprocess_summary_markdown(raw, rules)
+            st.markdown(md if md.strip() else "（空）")
             return
         if set(cols) >= {"theme", "category", "content"}:
-            st.markdown(_dataframe_summary_to_markdown(df))
+            md = dataframe_summary_to_markdown(df)
+            md = postprocess_summary_markdown(md, rules)
+            st.markdown(md)
             return
         st.text(df.to_string(index=False))
     except Exception:
-        st.markdown(text)
+        st.markdown(postprocess_summary_markdown(text, rules))
 
 
 try:
@@ -1623,7 +1601,12 @@ if st.session_state.selected_file_id is not None:
                         if prev:
                             content, model_used, created_at = prev
                             st.caption(f"保存済み · モデル: {model_used or GROQ_MODEL} · {created_at}")
-                            display_summary_content(content)
+                            summary_rules = (
+                                load_rules(SUMMARY_RULES_PATH)
+                                if os.path.isfile(SUMMARY_RULES_PATH)
+                                else {}
+                            )
+                            display_summary_content(content, summary_rules)
                             base_dl = os.path.splitext(filename)[0]
                             st.download_button(
                                 "要約を .csv でダウンロード",
@@ -1652,6 +1635,9 @@ if st.session_state.selected_file_id is not None:
                             ):
                                 md_summary = summarize_with_groq(
                                     transcript, rules, api_key=groq_key
+                                )
+                                md_summary = postprocess_summary_markdown(
+                                    md_summary, rules
                                 )
                                 summary_text = summary_markdown_to_csv(md_summary)
                             if insert_summary(file_id, summary_text, GROQ_MODEL):

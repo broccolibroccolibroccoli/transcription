@@ -118,6 +118,7 @@ def load_rules(csv_path: str) -> dict:
         "max_chars": 800,
         "sections": ["概要", ...],
         "speaker_labels": {"SPEAKER_00": "Aさん", ...},
+        "role_mapping": {"customer": "SPEAKER_00", "company": "SPEAKER_01"},
         "keywords": [],
         "exclude_filler": True,
         "output_lang": "ja",
@@ -134,6 +135,7 @@ def load_rules(csv_path: str) -> dict:
         "output_lang": "ja",
         "instruction_body": "",
         "_instruction_relpath": "",
+        "role_mapping": {},  # {"customer": "SPEAKER_00", "company": "SPEAKER_01"}
     }
 
     csv_dir = os.path.dirname(os.path.abspath(csv_path))
@@ -156,6 +158,9 @@ def load_rules(csv_path: str) -> dict:
 
             elif rtype == "speaker_label":
                 rules["speaker_labels"][param] = value
+
+            elif rtype == "role_mapping" and param in ("customer", "company") and value:
+                rules["role_mapping"][param] = value
 
             elif rtype == "keyword_highlight" and param == "keyword":
                 rules["keywords"].append(value)
@@ -515,6 +520,140 @@ def summary_markdown_to_csv(markdown_text: str) -> str:
     return buf.getvalue()
 
 
+# 要約の三大カテゴリ（instruction の【】と対応）
+SUMMARY_CATEGORY_THREE = frozenset(
+    {
+        "顧客の自発的発言",
+        "自社の誘導・同意",
+        "自社からの提案",
+    }
+)
+
+
+def normalize_section_title(text: str) -> str:
+    """【】・箇条書き記号・太字を除いたカテゴリ見出し文字列。"""
+    t = (text or "").strip()
+    t = re.sub(r"^[\*\-\+]\s*", "", t)
+    t = t.strip()
+    if t.startswith("【") and t.endswith("】"):
+        t = t[1:-1]
+    t = re.sub(r"\*\*(.+?)\*\*", r"\1", t)
+    return t.strip()
+
+
+def is_category_header_content_line(x: str) -> bool:
+    return normalize_section_title(x) in SUMMARY_CATEGORY_THREE
+
+
+def fix_category_markdown_bullets(md: str) -> str:
+    """三大カテゴリが * の箇条書きになっている行を ### 見出しに変える。"""
+    out: List[str] = []
+    for line in (md or "").splitlines():
+        s = line.strip()
+        matched = False
+        for label in SUMMARY_CATEGORY_THREE:
+            if s in (
+                f"* {label}",
+                f"- {label}",
+                f"+ {label}",
+                f"* 【{label}】",
+                f"- 【{label}】",
+                f"+ 【{label}】",
+                f"* **{label}**",
+                f"- **{label}**",
+                f"+ **{label}**",
+            ):
+                out.append(f"### {label}")
+                matched = True
+                break
+        if not matched:
+            out.append(line)
+    return "\n".join(out)
+
+
+def apply_summary_role_tags(text: str, rules: dict) -> str:
+    """
+    （顧客）（自社）を、role_mapping + speaker_labels で解決した表示に置き換える。
+    role_mapping に customer / company へ割り当てる話者 ID（例: SPEAKER_00）を書き、
+    speaker_label で表示名を上書きできる。未設定の speaker_label は ID のまま。
+    """
+    if not (text and str(text).strip()):
+        return text or ""
+    rm = rules.get("role_mapping") or {}
+    sl = rules.get("speaker_labels") or {}
+
+    def resolve(side: str) -> Optional[str]:
+        sid = (rm.get(side) or "").strip()
+        if not sid:
+            return None
+        return sl.get(sid, sid)
+
+    out = text
+    c = resolve("customer")
+    if c:
+        out = out.replace("（顧客）", f"（{c}）")
+        out = out.replace("(顧客)", f"({c})")
+    co = resolve("company")
+    if co:
+        out = out.replace("（自社）", f"（{co}）")
+        out = out.replace("(自社)", f"({co})")
+    return out
+
+
+def postprocess_summary_markdown(md: str, rules: dict) -> str:
+    """カテゴリ見出し整形 → 話者タグ置換の順。"""
+    md = fix_category_markdown_bullets(md or "")
+    md = apply_summary_role_tags(md, rules)
+    return md
+
+
+def dataframe_summary_to_markdown(df: Any) -> str:
+    """theme/category/content の DataFrame を Markdown に整形（カテゴリ行に * を付けない）。"""
+    import pandas as pd
+
+    def s(v) -> str:
+        if pd.isna(v):
+            return ""
+        return str(v).strip()
+
+    def norm_cat(v: str) -> str:
+        return normalize_section_title(v) if v else ""
+
+    def heading_display(c: str) -> str:
+        t = norm_cat(c)
+        return t if t else (c or "").strip()
+
+    current_theme = None
+    current_cat_norm: Optional[str] = None
+    parts: list[str] = []
+    for _, row in df.iterrows():
+        t = s(row.get("theme", ""))
+        c = s(row.get("category", ""))
+        x = s(row.get("content", ""))
+        if not x and not t and not c:
+            continue
+        if t != current_theme:
+            current_theme = t
+            current_cat_norm = None
+            if t:
+                parts.append(f"## {t}\n")
+        nc = norm_cat(c)
+        if c and nc != current_cat_norm:
+            current_cat_norm = nc
+            parts.append(f"### {heading_display(c)}\n")
+        if x:
+            if is_category_header_content_line(x):
+                clean = normalize_section_title(x)
+                if nc == clean:
+                    continue
+                if clean != current_cat_norm:
+                    current_cat_norm = clean
+                    parts.append(f"### {clean}\n")
+                continue
+            parts.append(f"* {x}\n")
+    return "".join(parts) if parts else "（空）"
+
+
 def _merge_intermediate_batch(
     batch: List[str],
     rules: dict,
@@ -787,6 +926,7 @@ def summarize_transcript_text(
     rules = load_rules(rules_path)
     transcript = preprocess_transcript(transcript_raw, rules)
     md = summarize_with_groq(transcript, rules, api_key=api_key)
+    md = postprocess_summary_markdown(md, rules)
     return summary_markdown_to_csv(md)
 
 
@@ -820,6 +960,7 @@ def main() -> None:
     rules = load_rules(args.rules)
     print(f"   セクション: {rules['sections']}")
     print(f"   話者ラベル: {rules['speaker_labels']}")
+    print(f"   話者ロール: {rules.get('role_mapping')}")
     print(f"   フィラー除去: {rules['exclude_filler']}")
     if rules.get("instruction_body"):
         print(f"   指示ファイル: 読み込み済み（{len(rules['instruction_body'])} 文字）")
@@ -833,6 +974,7 @@ def main() -> None:
 
     print(f"\n🤖 Groq ({GROQ_MODEL}) で要約中...")
     md_summary = summarize_with_groq(transcript, rules, verbose=True)
+    md_summary = postprocess_summary_markdown(md_summary, rules)
     csv_summary = summary_markdown_to_csv(md_summary)
 
     with open(args.output, "w", encoding="utf-8") as f:

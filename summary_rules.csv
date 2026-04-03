@@ -4,3 +4,5 @@ summary_length,max_chars,12000
 exclude_filler,enabled,false
 language,output_lang,ja
 instruction_file,path,summary_instruction.md
+role_mapping,customer,SPEAKER_00
+role_mapping,company,SPEAKER_01
