@@ -1399,16 +1399,12 @@ def estimate_completion_time(duration_seconds: float) -> datetime:
     return datetime.now() + timedelta(minutes=min(estimated_minutes, 45.0))
 
 
-def process_uploaded_file(
-    uploaded_file,
+def process_audio_file_at_path(
+    save_path: str,
     project_id: int = 1,
     speakers_expected: Optional[int] = None,
-):
-    """アップロードされたファイルを保存して処理（AssemblyAI）。"""
-    save_path = os.path.join(UPLOADS_DIR, uploaded_file.name)
-    with open(save_path, "wb") as f:
-        f.write(uploaded_file.getvalue())
-
+) -> dict:
+    """ディスク上の音声ファイルを文字起こし処理する（保存済みパスを想定）。"""
     key = get_assemblyai_api_key()
     if not key:
         return {
@@ -1447,6 +1443,18 @@ def process_uploaded_file(
             "success": False,
             "error": f"文字起こし処理で例外が発生しました: {e!s}",
         }
+
+
+def process_uploaded_file(
+    uploaded_file,
+    project_id: int = 1,
+    speakers_expected: Optional[int] = None,
+):
+    """アップロードされたファイルを保存して処理（AssemblyAI）。"""
+    save_path = os.path.join(UPLOADS_DIR, uploaded_file.name)
+    with open(save_path, "wb") as f:
+        f.write(uploaded_file.getvalue())
+    return process_audio_file_at_path(save_path, project_id, speakers_expected)
 
 
 def process_youtube_url(
@@ -1576,6 +1584,95 @@ DRAG_OVERLAY_HTML = """
 # セッション状態の初期化（サイドバーより前に実行）
 if "selected_project_id" not in st.session_state:
     st.session_state.selected_project_id = 1
+if "pending_transcription" not in st.session_state:
+    st.session_state.pending_transcription = None
+if "transcription_finish_toast" not in st.session_state:
+    st.session_state.transcription_finish_toast = None
+
+# 前回の文字起こし完了メッセージ（再ラン後にメイン上部へ一度だけ表示）
+if st.session_state.transcription_finish_toast is not None:
+    _toast = st.session_state.transcription_finish_toast
+    st.session_state.transcription_finish_toast = None
+    if _toast.get("ok"):
+        st.success(f"✅ {_toast.get('name', '')} の処理が完了しました")
+    else:
+        st.error(f"❌ エラー: {_toast.get('msg', 'Unknown error')}")
+
+# メイン画面中央: 文字起こし処理中（フォーム送信後に再ランして表示し、サイドバーは出さない）
+if st.session_state.pending_transcription is not None:
+    pt = st.session_state.pending_transcription
+    st.markdown(
+        """
+<style>
+.transcription-main-processing-wrap {
+    min-height: 62vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 2rem 1rem 1rem;
+    box-sizing: border-box;
+}
+.transcription-main-processing-wrap .tm-title {
+    font-size: 1.65rem;
+    font-weight: 700;
+    color: #0f172a;
+    margin: 0 0 0.65rem 0;
+    letter-spacing: 0.02em;
+}
+.transcription-main-processing-wrap .tm-eta {
+    font-size: 1.08rem;
+    color: #64748b;
+    margin: 0 0 1.35rem 0;
+    line-height: 1.5;
+}
+.transcription-main-processing-wrap .tm-note {
+    font-size: 0.9rem;
+    color: #94a3b8;
+    margin-top: 0.5rem;
+}
+</style>
+""",
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        f"""
+<div class="transcription-main-processing-wrap">
+  <p class="tm-title">処理中...</p>
+  <p class="tm-eta">完了予定: {pt["expected_str"]}</p>
+</div>
+""",
+        unsafe_allow_html=True,
+    )
+    _, col_main, _ = st.columns([1, 2.2, 1])
+    with col_main:
+        with st.spinner("音声を文字起こし処理を実行しています…"):
+            try:
+                result = process_audio_file_at_path(
+                    pt["path"],
+                    pt["project_id"],
+                    pt["speakers_expected"],
+                )
+            except Exception as e:
+                st.error(
+                    "処理が中断されました。AssemblyAI の応答待ち中にエラーが発生した可能性があります。"
+                    " API キーや残クレジット、音声ファイル形式を確認してください。"
+                )
+                st.exception(e)
+                result = {"success": False}
+    st.session_state.pending_transcription = None
+    done_name = (result or {}).get("filename") or pt.get("filename") or os.path.basename(
+        pt.get("path", "")
+    )
+    if result.get("success"):
+        st.session_state.transcription_finish_toast = {"ok": True, "name": done_name}
+    elif result.get("error"):
+        st.session_state.transcription_finish_toast = {
+            "ok": False,
+            "msg": result.get("error", "Unknown error"),
+        }
+    st.rerun()
 
 # サイドバー: プロジェクト選択・アップロード
 with st.sidebar:
@@ -1656,28 +1753,19 @@ with st.sidebar:
                 duration_sec = get_audio_duration_seconds(save_path)
                 expected_end = estimate_completion_time(duration_sec)
                 expected_str = expected_end.strftime("%Y/%m/%d %H:%M頃")
-                spinner_msg = f"処理中...\n\n完了予定: {expected_str}"
-                try:
-                    with st.spinner(spinner_msg):
-                        result = process_uploaded_file(
-                            uploaded,
-                            project_id=st.session_state.selected_project_id,
-                            speakers_expected=None
-                            if use_auto_speakers
-                            else speakers_expected_val,
-                        )
-                except Exception as e:
-                    st.error(
-                        "処理が中断されました。AssemblyAI の応答待ち中にエラーが発生した可能性があります。"
-                        " API キーや残クレジット、音声ファイル形式を確認してください。"
-                    )
-                    st.exception(e)
-                    result = {"success": False}
-                if result.get("success"):
-                    st.success(f"✅ {result.get('filename')} の処理が完了しました")
-                    st.rerun()
-                elif result.get("error"):
-                    st.error(f"❌ エラー: {result.get('error', 'Unknown error')}")
+                pid = st.session_state.selected_project_id
+                if pid is None:
+                    pid = 1
+                st.session_state.pending_transcription = {
+                    "path": save_path,
+                    "project_id": pid,
+                    "speakers_expected": None
+                    if use_auto_speakers
+                    else speakers_expected_val,
+                    "expected_str": expected_str,
+                    "filename": uploaded.name,
+                }
+                st.rerun()
 
     if SHOW_YOUTUBE_UPLOAD:
         tab_file, tab_youtube = st.tabs(["📁 ファイル", "▶️ YouTube URL"])
