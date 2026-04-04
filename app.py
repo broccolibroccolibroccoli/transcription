@@ -9,6 +9,7 @@ import os
 import html
 import csv
 import io
+import json
 from datetime import datetime, timedelta
 from typing import Optional
 
@@ -101,6 +102,41 @@ def get_groq_api_key() -> str:
 # True にするとサイドバーに YouTube URL 入力タブを表示
 SHOW_YOUTUBE_UPLOAD = False
 
+# リンクプレビュー用（Streamlit Community Cloud は README 先頭も参照。下記と揃える）
+LINK_PREVIEW_DESCRIPTION = (
+    "AI文字起こし×話者分離×自動要約。リサーチワークフローの自動化"
+)
+
+
+def inject_link_preview_meta() -> None:
+    """親ドキュメントの head に description / og:description を付与（ブラウザ・一部クローラ向け）。"""
+    desc_js = json.dumps(LINK_PREVIEW_DESCRIPTION, ensure_ascii=False)
+    components.html(
+        f"""
+<script>
+(function() {{
+  try {{
+    var doc = (window.parent && window.parent.document) ? window.parent.document : document;
+    if (!doc || !doc.head) return;
+    var text = {desc_js};
+    function ensure(sel, setAttr) {{
+      if (doc.querySelector(sel)) return;
+      var m = doc.createElement('meta');
+      setAttr(m);
+      m.setAttribute('content', text);
+      doc.head.appendChild(m);
+    }}
+    ensure('meta[name="description"]', function(m) {{ m.setAttribute('name', 'description'); }});
+    ensure('meta[property="og:description"]', function(m) {{ m.setAttribute('property', 'og:description'); }});
+    ensure('meta[name="twitter:description"]', function(m) {{ m.setAttribute('name', 'twitter:description'); }});
+  }} catch (e) {{}}
+}})();
+</script>
+""",
+        height=0,
+    )
+
+
 # Streamlit では set_page_config を最初の st 呼び出しにする（クラウドでの起動失敗を防ぐ）
 st.set_page_config(
     page_title="音声文字起こしアプリ",
@@ -108,6 +144,7 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
 )
+inject_link_preview_meta()
 
 try:
     os.makedirs(UPLOADS_DIR, exist_ok=True)
