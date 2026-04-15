@@ -1,0 +1,20 @@
+エラー「relation transcript_vector_chunks does not exist」のとき============================================================
+
+1. pgvector が入った PostgreSQL に、.env の TRANSCRIPTION_DATABASE_URL（または DATABASE_URL）と同じ DB へ接続する。
+
+2. 埋め込みの次元に合わせて、次のどちらか **1つだけ** を実行する。
+
+   自動（.env の DSN・バックエンド／次元から SQL を選ぶ）:
+     python scripts/apply_transcript_vector_table.py
+
+   手動（psql 例）:
+
+   OpenAI 等・1536 次元:
+     psql "$TRANSCRIPTION_DATABASE_URL" -f sql/vector_transcript_setup.sql
+
+   Ollama nomic-embed-text 等・768 次元:
+     psql "$TRANSCRIPTION_DATABASE_URL" -f sql/vector_transcript_setup_ollama.sql
+
+3. 既に別次元でテーブルを作り直す場合は、バックアップのうえ DROP TABLE public.transcript_vector_chunks; してから、正しい SQL を流し直す。
+
+4. .env の TRANSCRIPTION_EMBEDDING_DIMENSIONS と、テーブルの VECTOR(n) の n を一致させる。

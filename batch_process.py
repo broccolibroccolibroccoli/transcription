@@ -259,6 +259,15 @@ def process_audio_file(
 
         print(f"✅ {filename} の処理が完了しました（{segment_count}セグメント）")
 
+        try:
+            from transcription_pg_search import sync_file_from_sqlite
+
+            s_ok, s_err = sync_file_from_sqlite(file_id, db_path)
+            if not s_ok and s_err:
+                print(f"\u26a0\ufe0f PostgreSQL \u540c\u671f: {s_err}")
+        except Exception as _e:
+            print(f"\u26a0\ufe0f PostgreSQL \u540c\u671f\u30b9\u30ad\u30c3\u30d7: {_e}")
+
         return {
             "success": True,
             "filename": filename,

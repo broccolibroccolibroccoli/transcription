@@ -14,6 +14,13 @@ from datetime import datetime, timedelta
 from typing import Optional
 
 from segment_postprocess import fix_speaker_boundary_rows
+from streamlit_vector_search_ui import (
+    PGAI_SEARCH_HEADER_HTML,
+    pg_sync_sqlite_file,
+    render_inline_search_toggle,
+    render_vector_search_drawer,
+    setup_main_search_layout,
+)
 from summarize_transcript import (
     GROQ_MODEL,
     dataframe_summary_to_markdown,
@@ -791,6 +798,15 @@ hr {
     background-color: rgba(42, 171, 159, 0.08) !important;
 }
 
+/* 検索ドロワー */
+.ts-search-drawer-inner {
+    animation: tsDrawerIn 0.28s ease-out;
+}
+@keyframes tsDrawerIn {
+    from { transform: translateX(16px); opacity: 0.88; }
+    to { transform: translateX(0); opacity: 1; }
+}
+
 /* フォント */
 html, body, [class*="css"] {
     font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", "Hiragino Kaku Gothic ProN", "Hiragino Sans", Meiryo, sans-serif !important;
@@ -808,7 +824,7 @@ html, body, [class*="css"] {
 </style>
 """
 st.markdown(KARTE_ACADEMY_CSS, unsafe_allow_html=True)
-
+components.html(PGAI_SEARCH_HEADER_HTML, height=0)
 
 
 def format_time_mm_ss(seconds):
@@ -1224,6 +1240,7 @@ def move_to_project_dialog(file_id: int, filename: str):
             target_id = options[target]
             ok, err = assign_file_to_project(file_id, target_id)
             if ok:
+                pg_sync_sqlite_file(file_id, DB_PATH)
                 st.session_state.pending_move = None
                 st.rerun()
             else:
@@ -1251,6 +1268,7 @@ def rename_file_dialog(file_id: int, current_filename: str):
                 if success:
                     if st.session_state.selected_filename == current_filename:
                         st.session_state.selected_filename = new_name.strip()
+                    pg_sync_sqlite_file(file_id, DB_PATH)
                     st.session_state.pending_rename = None
                     st.rerun()
                 else:
@@ -1338,6 +1356,12 @@ def delete_file(file_id):
     ファイルをDBとディスクから削除する
     Returns: (success: bool, error_message: str or None)
     """
+    try:
+        from transcription_pg_search import delete_file_from_pg
+
+        delete_file_from_pg(file_id)
+    except Exception:
+        pass
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     try:
@@ -1588,6 +1612,26 @@ if "pending_transcription" not in st.session_state:
     st.session_state.pending_transcription = None
 if "transcription_finish_toast" not in st.session_state:
     st.session_state.transcription_finish_toast = None
+if "search_panel_open" not in st.session_state:
+    st.session_state.search_panel_open = False
+if "search_panel_minimized" not in st.session_state:
+    st.session_state.search_panel_minimized = False
+if "pgai_search_last_rows" not in st.session_state:
+    st.session_state.pgai_search_last_rows = []
+if "pgai_search_last_err" not in st.session_state:
+    st.session_state.pgai_search_last_err = None
+
+if st.query_params.get("pgai_search") == "1":
+    st.session_state.search_panel_open = True
+    st.session_state.search_panel_minimized = False
+    try:
+        del st.query_params["pgai_search"]
+    except Exception:
+        try:
+            st.query_params.clear()
+        except Exception:
+            pass
+    st.rerun()
 
 # 前回の文字起こし完了メッセージ（再ラン後にメイン上部へ一度だけ表示）
 if st.session_state.transcription_finish_toast is not None:
@@ -1839,270 +1883,280 @@ if "editing_file_id" not in st.session_state:
 if "pending_confirm_exit" not in st.session_state:
     st.session_state.pending_confirm_exit = False
 
-# ファイルが選択されている場合: 別ページで文字起こしを表示
-if st.session_state.selected_file_id is not None:
-    file_id = st.session_state.selected_file_id
-    filename = st.session_state.selected_filename or ""
 
-    # 選択中ファイルの情報を取得（プロジェクト選択に関係なく取得）
-    file_info = get_file_by_id(file_id)
-    if file_info:
-        _, filename, duration, status, processed_at, error_msg, *_ = file_info
+_layout_main, _layout_drawer = setup_main_search_layout()
 
-        if st.button("← 一覧に戻る", key="back_to_list"):
-            if st.session_state.editing_file_id == file_id:
-                st.session_state.pending_confirm_exit = True
-                st.rerun()
-            else:
-                st.session_state.selected_file_id = None
-                st.session_state.selected_filename = None
-                st.rerun()
+with _layout_main:
+    render_inline_search_toggle()
+    # ファイルが選択されている場合: 別ページで文字起こしを表示
+    if st.session_state.selected_file_id is not None:
+        file_id = st.session_state.selected_file_id
+        filename = st.session_state.selected_filename or ""
 
-        # 編集中の画面遷移確認モーダル
-        if st.session_state.pending_confirm_exit and st.session_state.editing_file_id == file_id:
-            segments_for_modal = get_segments_by_file_id(file_id)
-            confirm_exit_edit_dialog(file_id, segments_for_modal)
+        # 選択中ファイルの情報を取得（プロジェクト選択に関係なく取得）
+        file_info = get_file_by_id(file_id)
+        if file_info:
+            _, filename, duration, status, processed_at, error_msg, *_ = file_info
 
-        st.subheader(f"📄 {filename}")
-        if error_msg:
-            st.error(error_msg)
-        if status == "completed":
-            segments = get_segments_by_file_id(file_id)
-            if segments:
-                is_editing = st.session_state.editing_file_id == file_id
+            if st.button("← 一覧に戻る", key="back_to_list"):
+                if st.session_state.editing_file_id == file_id:
+                    st.session_state.pending_confirm_exit = True
+                    st.rerun()
+                else:
+                    st.session_state.selected_file_id = None
+                    st.session_state.selected_filename = None
+                    st.rerun()
 
-                # 修正 / CSV / プロジェクト移動 / 削除（右寄せ、アイコンのみ）
-                _, col_btns = st.columns([4, 1])
-                with col_btns:
-                    sub1, sub2, sub3, sub4 = st.columns(4, gap="xsmall")
-                with sub1:
-                    if is_editing:
-                        if st.button("🔄", key=f"save_and_exit_{file_id}", type="primary", help="編集内容を保存"):
+            # 編集中の画面遷移確認モーダル
+            if st.session_state.pending_confirm_exit and st.session_state.editing_file_id == file_id:
+                segments_for_modal = get_segments_by_file_id(file_id)
+                confirm_exit_edit_dialog(file_id, segments_for_modal)
+
+            st.subheader(f"📄 {filename}")
+            if error_msg:
+                st.error(error_msg)
+            if status == "completed":
+                segments = get_segments_by_file_id(file_id)
+                if segments:
+                    is_editing = st.session_state.editing_file_id == file_id
+
+                    # 修正 / CSV / プロジェクト移動 / 削除（右寄せ、アイコンのみ）
+                    _, col_btns = st.columns([4, 1])
+                    with col_btns:
+                        sub1, sub2, sub3, sub4 = st.columns(4, gap="xsmall")
+                    with sub1:
+                        if is_editing:
+                            if st.button("🔄", key=f"save_and_exit_{file_id}", type="primary", help="編集内容を保存"):
+                                for seg_idx, speaker, text, start, end in segments:
+                                    key_text = f"edit_{file_id}_{seg_idx}"
+                                    key_speaker = f"edit_speaker_{file_id}_{seg_idx}"
+                                    new_text = st.session_state.get(key_text, text)
+                                    new_speaker = st.session_state.get(key_speaker, speaker or "UNKNOWN")
+                                    if new_text is not None:
+                                        update_segment_text(file_id, seg_idx, new_text)
+                                    if new_speaker is not None:
+                                        update_segment_speaker(file_id, seg_idx, new_speaker)
+                                st.session_state.editing_file_id = None
+                                pg_sync_sqlite_file(file_id, DB_PATH)
+                                st.success("✓ 修正を保存しました")
+                                st.rerun()
+                        else:
+                            if st.button("✏️", key=f"start_edit_{file_id}", help="修正"):
+                                st.session_state.editing_file_id = file_id
+                                st.rerun()
+                    with sub2:
+                        # 表示時はDBから、編集時は編集中の内容を使用
+                        if is_editing:
+                            segs_for_csv = []
                             for seg_idx, speaker, text, start, end in segments:
                                 key_text = f"edit_{file_id}_{seg_idx}"
                                 key_speaker = f"edit_speaker_{file_id}_{seg_idx}"
-                                new_text = st.session_state.get(key_text, text)
-                                new_speaker = st.session_state.get(key_speaker, speaker or "UNKNOWN")
-                                if new_text is not None:
-                                    update_segment_text(file_id, seg_idx, new_text)
-                                if new_speaker is not None:
-                                    update_segment_speaker(file_id, seg_idx, new_speaker)
-                            st.session_state.editing_file_id = None
-                            st.success("✓ 修正を保存しました")
+                                text_val = st.session_state.get(key_text, text)
+                                speaker_val = st.session_state.get(key_speaker, speaker or "UNKNOWN")
+                                segs_for_csv.append((seg_idx, speaker_val or "UNKNOWN", text_val or text, start, end))
+                        else:
+                            segs_for_csv = [(i, s or "UNKNOWN", t, st, e) for i, s, t, st, e in segments]
+                        segs_for_csv = fix_speaker_boundary_rows(segs_for_csv)
+                        csv_content = segments_to_csv(segs_for_csv)
+                        base_name = os.path.splitext(filename)[0]
+                        dl_filename = f"{base_name}_文字起こし.csv"
+                        st.download_button(
+                            "📥",
+                            data=csv_content,
+                            file_name=dl_filename,
+                            mime="text/csv",
+                            key=f"csv_dl_{file_id}",
+                            use_container_width=False,
+                            help="CSV形式でダウンロード"
+                        )
+                    with sub3:
+                        if st.button("📂", key=f"move_detail_{file_id}", help="プロジェクトに移動"):
+                            st.session_state.pending_move = (file_id, filename)
                             st.rerun()
-                    else:
-                        if st.button("✏️", key=f"start_edit_{file_id}", help="修正"):
-                            st.session_state.editing_file_id = file_id
+                    with sub4:
+                        if st.button("🗑️", key=f"delete_detail_{file_id}", help="削除"):
+                            st.session_state.pending_delete = (file_id, filename)
                             st.rerun()
-                with sub2:
-                    # 表示時はDBから、編集時は編集中の内容を使用
+
+                    with st.expander("📊 要約（Groq）", expanded=False):
+                        if not os.path.isfile(SUMMARY_RULES_PATH):
+                            st.warning("要約ルール `summary_rules.csv` が見つかりません。")
+                        elif is_editing:
+                            st.info("編集内容を保存してから要約を生成してください。")
+                        else:
+                            prev = get_latest_summary(file_id)
+                            if prev:
+                                content, model_used, created_at = prev
+                                st.caption(f"保存済み · モデル: {model_used or GROQ_MODEL} · {created_at}")
+                                summary_rules = (
+                                    load_rules(SUMMARY_RULES_PATH)
+                                    if os.path.isfile(SUMMARY_RULES_PATH)
+                                    else {}
+                                )
+                                display_summary_content(content, summary_rules)
+                                base_dl = os.path.splitext(filename)[0]
+                                st.download_button(
+                                    "要約を .csv でダウンロード",
+                                    data=(content or "").encode("utf-8-sig"),
+                                    file_name=f"{base_dl}_要約.csv",
+                                    mime="text/csv",
+                                    key=f"summary_dl_{file_id}",
+                                )
+                            groq_key = get_groq_api_key()
+                            if not groq_key:
+                                st.error(
+                                    "GROQ_API_KEY が未設定です。.env または Streamlit Secrets に設定してください。"
+                                )
+                            elif st.button(
+                                "要約を生成" if not prev else "要約を再生成",
+                                key=f"summarize_{file_id}",
+                                type="secondary",
+                            ):
+                                raw_text = segments_rows_to_transcript(
+                                    segments, apply_boundary_fix=True
+                                )
+                                rules = load_rules(SUMMARY_RULES_PATH)
+                                transcript = preprocess_transcript(raw_text, rules)
+                                with st.spinner(
+                                    "Groq で要約中…（長文はチャンク分割のため数分かかる場合があります）"
+                                ):
+                                    md_summary = summarize_with_groq(
+                                        transcript, rules, api_key=groq_key
+                                    )
+                                    md_summary = postprocess_summary_markdown(
+                                        md_summary, rules
+                                    )
+                                    summary_text = summary_markdown_to_csv(md_summary)
+                                if insert_summary(file_id, summary_text, GROQ_MODEL):
+                                    st.success("要約を保存しました。")
+                                    st.rerun()
+                                else:
+                                    st.error("要約の保存に失敗しました。")
+
                     if is_editing:
-                        segs_for_csv = []
+                        # 選択中（フォーカス中）のテキストエリアのみ枠をprimaryColorで強調
+                        st.markdown("""
+                        <style>
+                            [data-testid="stTextArea"] textarea:focus {
+                                border: 2px solid #2aab9f !important;
+                                border-radius: 6px !important;
+                                box-shadow: 0 0 0 2px rgba(42, 171, 159, 0.3) !important;
+                            }
+                        </style>
+                        """, unsafe_allow_html=True)
+                        # 1発言単位で編集可能なテキスト入力（話者・テキスト両方）
+                        st.caption("話者名やテキストを修正して「🔄」を押してください。")
                         for seg_idx, speaker, text, start, end in segments:
+                            speaker_str = speaker or "UNKNOWN"
                             key_text = f"edit_{file_id}_{seg_idx}"
                             key_speaker = f"edit_speaker_{file_id}_{seg_idx}"
-                            text_val = st.session_state.get(key_text, text)
-                            speaker_val = st.session_state.get(key_speaker, speaker or "UNKNOWN")
-                            segs_for_csv.append((seg_idx, speaker_val or "UNKNOWN", text_val or text, start, end))
+                            time_label = f"({format_time_mm_ss(start)}-{format_time_mm_ss(end)})"
+                            with st.container():
+                                col_speaker, col_time = st.columns([2, 1])
+                                with col_speaker:
+                                    st.text_input(
+                                        "話者",
+                                        value=speaker_str,
+                                        key=key_speaker,
+                                        label_visibility="visible",
+                                        placeholder="例: 山田、SPEAKER_00",
+                                    )
+                                with col_time:
+                                    st.caption(time_label)
+                                st.text_area(
+                                    "発言内容",
+                                    value=text,
+                                    key=key_text,
+                                    label_visibility="visible",
+                                    height=80,
+                                )
+                                st.divider()
                     else:
-                        segs_for_csv = [(i, s or "UNKNOWN", t, st, e) for i, s, t, st, e in segments]
-                    segs_for_csv = fix_speaker_boundary_rows(segs_for_csv)
-                    csv_content = segments_to_csv(segs_for_csv)
-                    base_name = os.path.splitext(filename)[0]
-                    dl_filename = f"{base_name}_文字起こし.csv"
-                    st.download_button(
-                        "📥",
-                        data=csv_content,
-                        file_name=dl_filename,
-                        mime="text/csv",
-                        key=f"csv_dl_{file_id}",
-                        use_container_width=False,
-                        help="CSV形式でダウンロード"
-                    )
-                with sub3:
-                    if st.button("📂", key=f"move_detail_{file_id}", help="プロジェクトに移動"):
+                        # 表示モード（マウスオーバーでハイライト）
+                        for seg_idx, speaker, text, start, end in segments:
+                            speaker_str = speaker or "Speaker A"
+                            time_range = f"{format_time_mm_ss(start)}-{format_time_mm_ss(end)}"
+                            text_escaped = html.escape(text).replace("\n", "<br>")
+                            seg_html = (
+                                f'<div class="transcript-segment">'
+                                f'<span style="color: #334155; font-size: 0.95rem; font-weight: 600;">'
+                                f'{html.escape(speaker_str)}</span>'
+                                f'<span style="color: #64748B; font-size: 0.85rem;">（{time_range}）</span>'
+                                f'：{text_escaped}</div>'
+                            )
+                            st.markdown(seg_html, unsafe_allow_html=True)
+                else:
+                    st.warning("セグメントが見つかりませんでした")
+            else:
+                st.caption(f"ステータス: {status}")
+
+            # プロジェクト移動モーダル（詳細画面から）
+            if st.session_state.pending_move:
+                mid, mname = st.session_state.pending_move
+                move_to_project_dialog(mid, mname)
+            # 削除確認モーダル（詳細画面から削除ボタンを押した場合）
+            if st.session_state.pending_delete:
+                del_file_id, del_filename = st.session_state.pending_delete
+                confirm_delete_dialog(del_file_id, del_filename)
+        else:
+            # ファイルが削除された場合など
+            st.session_state.selected_file_id = None
+            st.session_state.selected_filename = None
+            st.rerun()
+
+    # 一覧表示
+    elif not files:
+        st.header("📋 登録ファイル一覧")
+        st.info("まだファイルが登録されていません。サイドバーから音声ファイルをアップロードしてください。")
+    else:
+        st.header("📋 登録ファイル一覧")
+
+        # プロジェクトごとにグループ化（見出しの直下にプロジェクト単位要約）
+        prev_project_id = None
+        for row in files:
+            file_id, filename, duration, status, processed_at, error_msg, project_id, project_name = row
+            if project_id != prev_project_id:
+                prev_project_id = project_id
+                st.subheader(f"📁 {project_name}", divider="gray")
+                render_project_summary_section(project_id, project_name)
+            # ファイル行: ファイル名（クリックで別ページへ）| 3点リーダーメニュー
+            col_name, col_menu = st.columns([10, 1])
+            with col_name:
+                duration_str = f"{duration:.1f}秒" if duration else "N/A"
+                label = f"{filename} — {status} ({duration_str})"
+                if st.button(label, key=f"select_{file_id}", use_container_width=True):
+                    st.session_state.selected_file_id = file_id
+                    st.session_state.selected_filename = filename
+                    st.rerun()
+            with col_menu:
+                with st.popover("⋯", key=f"menu_{file_id}", help="メニュー"):
+                    if st.button("名前変更", key=f"menu_rename_{file_id}"):
+                        st.session_state.pending_rename = (file_id, filename)
+                        st.rerun()
+                    if st.button("プロジェクトに移動", key=f"menu_move_{file_id}"):
                         st.session_state.pending_move = (file_id, filename)
                         st.rerun()
-                with sub4:
-                    if st.button("🗑️", key=f"delete_detail_{file_id}", help="削除"):
+                    if st.button("削除", key=f"menu_delete_{file_id}"):
                         st.session_state.pending_delete = (file_id, filename)
                         st.rerun()
 
-                with st.expander("📊 要約（Groq）", expanded=False):
-                    if not os.path.isfile(SUMMARY_RULES_PATH):
-                        st.warning("要約ルール `summary_rules.csv` が見つかりません。")
-                    elif is_editing:
-                        st.info("編集内容を保存してから要約を生成してください。")
-                    else:
-                        prev = get_latest_summary(file_id)
-                        if prev:
-                            content, model_used, created_at = prev
-                            st.caption(f"保存済み · モデル: {model_used or GROQ_MODEL} · {created_at}")
-                            summary_rules = (
-                                load_rules(SUMMARY_RULES_PATH)
-                                if os.path.isfile(SUMMARY_RULES_PATH)
-                                else {}
-                            )
-                            display_summary_content(content, summary_rules)
-                            base_dl = os.path.splitext(filename)[0]
-                            st.download_button(
-                                "要約を .csv でダウンロード",
-                                data=(content or "").encode("utf-8-sig"),
-                                file_name=f"{base_dl}_要約.csv",
-                                mime="text/csv",
-                                key=f"summary_dl_{file_id}",
-                            )
-                        groq_key = get_groq_api_key()
-                        if not groq_key:
-                            st.error(
-                                "GROQ_API_KEY が未設定です。.env または Streamlit Secrets に設定してください。"
-                            )
-                        elif st.button(
-                            "要約を生成" if not prev else "要約を再生成",
-                            key=f"summarize_{file_id}",
-                            type="secondary",
-                        ):
-                            raw_text = segments_rows_to_transcript(
-                                segments, apply_boundary_fix=True
-                            )
-                            rules = load_rules(SUMMARY_RULES_PATH)
-                            transcript = preprocess_transcript(raw_text, rules)
-                            with st.spinner(
-                                "Groq で要約中…（長文はチャンク分割のため数分かかる場合があります）"
-                            ):
-                                md_summary = summarize_with_groq(
-                                    transcript, rules, api_key=groq_key
-                                )
-                                md_summary = postprocess_summary_markdown(
-                                    md_summary, rules
-                                )
-                                summary_text = summary_markdown_to_csv(md_summary)
-                            if insert_summary(file_id, summary_text, GROQ_MODEL):
-                                st.success("要約を保存しました。")
-                                st.rerun()
-                            else:
-                                st.error("要約の保存に失敗しました。")
-
-                if is_editing:
-                    # 選択中（フォーカス中）のテキストエリアのみ枠をprimaryColorで強調
-                    st.markdown("""
-                    <style>
-                        [data-testid="stTextArea"] textarea:focus {
-                            border: 2px solid #2aab9f !important;
-                            border-radius: 6px !important;
-                            box-shadow: 0 0 0 2px rgba(42, 171, 159, 0.3) !important;
-                        }
-                    </style>
-                    """, unsafe_allow_html=True)
-                    # 1発言単位で編集可能なテキスト入力（話者・テキスト両方）
-                    st.caption("話者名やテキストを修正して「🔄」を押してください。")
-                    for seg_idx, speaker, text, start, end in segments:
-                        speaker_str = speaker or "UNKNOWN"
-                        key_text = f"edit_{file_id}_{seg_idx}"
-                        key_speaker = f"edit_speaker_{file_id}_{seg_idx}"
-                        time_label = f"({format_time_mm_ss(start)}-{format_time_mm_ss(end)})"
-                        with st.container():
-                            col_speaker, col_time = st.columns([2, 1])
-                            with col_speaker:
-                                st.text_input(
-                                    "話者",
-                                    value=speaker_str,
-                                    key=key_speaker,
-                                    label_visibility="visible",
-                                    placeholder="例: 山田、SPEAKER_00",
-                                )
-                            with col_time:
-                                st.caption(time_label)
-                            st.text_area(
-                                "発言内容",
-                                value=text,
-                                key=key_text,
-                                label_visibility="visible",
-                                height=80,
-                            )
-                            st.divider()
-                else:
-                    # 表示モード（マウスオーバーでハイライト）
-                    for seg_idx, speaker, text, start, end in segments:
-                        speaker_str = speaker or "Speaker A"
-                        time_range = f"{format_time_mm_ss(start)}-{format_time_mm_ss(end)}"
-                        text_escaped = html.escape(text).replace("\n", "<br>")
-                        seg_html = (
-                            f'<div class="transcript-segment">'
-                            f'<span style="color: #334155; font-size: 0.95rem; font-weight: 600;">'
-                            f'{html.escape(speaker_str)}</span>'
-                            f'<span style="color: #64748B; font-size: 0.85rem;">（{time_range}）</span>'
-                            f'：{text_escaped}</div>'
-                        )
-                        st.markdown(seg_html, unsafe_allow_html=True)
-            else:
-                st.warning("セグメントが見つかりませんでした")
-        else:
-            st.caption(f"ステータス: {status}")
-
-        # プロジェクト移動モーダル（詳細画面から）
+        # プロジェクト移動モーダル
         if st.session_state.pending_move:
             mid, mname = st.session_state.pending_move
             move_to_project_dialog(mid, mname)
-        # 削除確認モーダル（詳細画面から削除ボタンを押した場合）
+        # 名前変更モーダル
+        if st.session_state.pending_rename:
+            rid, rname = st.session_state.pending_rename
+            rename_file_dialog(rid, rname)
+        # 削除確認モーダルを表示（ループ後に呼び出し）
         if st.session_state.pending_delete:
             del_file_id, del_filename = st.session_state.pending_delete
             confirm_delete_dialog(del_file_id, del_filename)
-    else:
-        # ファイルが削除された場合など
-        st.session_state.selected_file_id = None
-        st.session_state.selected_filename = None
-        st.rerun()
 
-# 一覧表示
-elif not files:
-    st.header("📋 登録ファイル一覧")
-    st.info("まだファイルが登録されていません。サイドバーから音声ファイルをアップロードしてください。")
-else:
-    st.header("📋 登録ファイル一覧")
 
-    # プロジェクトごとにグループ化（見出しの直下にプロジェクト単位要約）
-    prev_project_id = None
-    for row in files:
-        file_id, filename, duration, status, processed_at, error_msg, project_id, project_name = row
-        if project_id != prev_project_id:
-            prev_project_id = project_id
-            st.subheader(f"📁 {project_name}", divider="gray")
-            render_project_summary_section(project_id, project_name)
-        # ファイル行: ファイル名（クリックで別ページへ）| 3点リーダーメニュー
-        col_name, col_menu = st.columns([10, 1])
-        with col_name:
-            duration_str = f"{duration:.1f}秒" if duration else "N/A"
-            label = f"{filename} — {status} ({duration_str})"
-            if st.button(label, key=f"select_{file_id}", use_container_width=True):
-                st.session_state.selected_file_id = file_id
-                st.session_state.selected_filename = filename
-                st.rerun()
-        with col_menu:
-            with st.popover("⋯", key=f"menu_{file_id}", help="メニュー"):
-                if st.button("名前変更", key=f"menu_rename_{file_id}"):
-                    st.session_state.pending_rename = (file_id, filename)
-                    st.rerun()
-                if st.button("プロジェクトに移動", key=f"menu_move_{file_id}"):
-                    st.session_state.pending_move = (file_id, filename)
-                    st.rerun()
-                if st.button("削除", key=f"menu_delete_{file_id}"):
-                    st.session_state.pending_delete = (file_id, filename)
-                    st.rerun()
-
-    # プロジェクト移動モーダル
-    if st.session_state.pending_move:
-        mid, mname = st.session_state.pending_move
-        move_to_project_dialog(mid, mname)
-    # 名前変更モーダル
-    if st.session_state.pending_rename:
-        rid, rname = st.session_state.pending_rename
-        rename_file_dialog(rid, rname)
-    # 削除確認モーダルを表示（ループ後に呼び出し）
-    if st.session_state.pending_delete:
-        del_file_id, del_filename = st.session_state.pending_delete
-        confirm_delete_dialog(del_file_id, del_filename)
-
+if _layout_drawer is not None:
+    with _layout_drawer:
+        render_vector_search_drawer()
 # CSS読み込み順を最後に（Streamlitデフォルトより後で確実に適用）
 st.markdown("""
 <style>
